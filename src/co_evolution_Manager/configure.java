@@ -6,11 +6,21 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import javax.annotation.Nonnull;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.util.FileManager;
@@ -27,7 +37,13 @@ import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
+import org.w3c.dom.DOMException;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
+import Conflict_Resolver.auto_Selector;
 import Conflict_Resolver.resolver;
 import Conflict_Resolver.statistics;
 
@@ -55,17 +71,16 @@ public class configure {
 	public static String fileSyntax;
 	public static List<String> predicateList;
 	public static Map<String, String> strategyforPredicate;
+	public static List<String> predicates_toResolve = new ArrayList<String>();
+	public static List<String> predicates_notToResolve = new ArrayList<String>();
 	
 	public static String ontology;	
 	private static OWLOntology OWLOntology;
 	private static OWLOntologyManager manager;
-
-	public static void configureFiles (String sa, String sd, String ta, String td, String t) {
-//System.out.println(sa+" "+sd+" " + ta+ " " + td + " " + t);
-		if( !isEmpty (t))
-			setinitialTarget(t);
-		else
-			setinitialTarget(null);	
+	private static String filename = "";
+	
+	public void configureFiles (String sa, String sd, String ta, String td) {
+		reset_counters();
 
 		if( !isEmpty (sa))
 			setsourceAdditionsChangeset(sa);
@@ -85,57 +100,61 @@ public class configure {
 		if( !isEmpty (td))
 			settargetDeletionsChangeset(td);
 		else
-			settargetDeletionsChangeset(null);	
-	
-		//updateDatasetSize (); 
+			settargetDeletionsChangeset(null);	 
 	}
 
 	
-	configure (String synt, String p, String o) throws IOException, OWLException{ 
+	configure (String synt, String p, String o, String it) throws IOException, OWLException{ 
 		reset_counters();
 		createFiles ("SyncSrcAdd", "SyncSrcDel", "SyncTarAdd", "SyncTarDel");
 		configure.fileSyntax = synt;
 		configure.ontology = o;						
 		predicateList = getPredicates(p);
-		selectStrategy(); //todo:autoload strategy
-
-		//save(strat);	
+		if( !isEmpty (it))
+			setinitialTarget(it);
+		else
+			setinitialTarget(null);	
+		selectStrategy(); 
 	}
 	
-	private static void selectStrategy() throws OWLException {
-		
+	private static void selectStrategy() throws OWLException {		
 		strategyforPredicate  = new HashMap<String, String>();
+		filename = "strategy_"+ initialTarget+".xml";
+		File file = new File(filename);
 
-		List<String> predicates_toResolve = new ArrayList<String>();
-		List<String> predicates_notToResolve = new ArrayList<String>();
-		
-		System.out.println("Select strategy for each predicate.\n Allowed strategies: 1-syncsourceNignorelocal, 2-nsyncsourceBkeeplocal, 3-syncsourceNkeeplocalBnotconflicts, " + 
-		"4-syncsourceNkeeplocalWresolvedconflicts.");
-		
-		for (String predicate: predicateList) {
-				System.out.println("\nEnter a strategy for property: "+ predicate);
-				String strategy = main.scanner.nextLine();
-				switch (strategy) {
-				case "1":
-					strategy= "syncsourceNignorelocal";
-					break;
-				case "2":
-					strategy= "nsyncsourceBkeeplocal";
-					break;
-				case "3":
-					strategy= "syncsourceNkeeplocalBnotconflict";
-					break;
-				case "4":
-					strategy= "syncsourceNkeeplocalWresolvedconflicts";
-					break;
-				}
-				configure.strategyforPredicate.put(predicate, strategy);
-				if (strategy.equals("syncsourceNkeeplocalWresolvedconflicts")) 
-					predicates_toResolve.add(predicate);
-				if (strategy.equals("syncsourceNkeeplocalBnotconflicts")) 
-					predicates_notToResolve.add(predicate);	
-				
+		if(!file.exists()) 	{
+			System.out.println("Select strategy for each predicate.\n Allowed strategies: 1-syncsourceNignorelocal, 2-nsyncsourceBkeeplocal, 3-syncsourceNkeeplocalBnotconflicts, " + 
+					"4-syncsourceNkeeplocalWresolvedconflicts.");
+					
+					for (String predicate: predicateList) {
+							System.out.println("\nEnter a strategy for property: "+ predicate);
+							String strategy = main.scanner.nextLine();
+							switch (strategy) {
+							case "1":
+								strategy= "syncsourceNignorelocal";
+								break;
+							case "2":
+								strategy= "nsyncsourceBkeeplocal";
+								break;
+							case "3":
+								strategy= "syncsourceNkeeplocalBnotconflict";
+								break;
+							case "4":
+								strategy= "syncsourceNkeeplocalWresolvedconflicts";
+								break;
+							}
+							strategyforPredicate.put(predicate, strategy);
+							if (strategy.equals("syncsourceNkeeplocalWresolvedconflicts")) 
+								predicates_toResolve.add(predicate);
+							if (strategy.equals("syncsourceNkeeplocalBnotconflicts")) 
+								predicates_notToResolve.add(predicate);	
+							
+					}
+			create(strategyforPredicate);		
 		}
+		else 
+			populate();	
+		
 		if (!predicates_toResolve.isEmpty() || !predicates_notToResolve.isEmpty()) {
 			checkPredicateType (); 
 			System.out.println("For manual resolution, press 0. For auto resolution, press 1.");	
@@ -153,6 +172,71 @@ public class configure {
 			Conflict_Finder.source_Delta.setPredicateFunctionUseCounter ();	
 		}
 	}
+	public static void populate(){		
+		try {
+			File fXmlFile = new File(filename);
+			DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+			Document doc = dBuilder.parse(fXmlFile);
+			doc.getDocumentElement().normalize();
+
+			NodeList predList = doc.getElementsByTagName("Predicate");
+
+			for (int temp = 0; temp < predList.getLength(); temp++) {
+				Node pred = predList.item(temp);	    				
+
+				if (pred.getNodeType() == Node.ELEMENT_NODE) {
+					Element p = (Element) pred;
+					String predicate = p.getAttribute("name");
+					String strategy = p.getAttribute("strategy");
+					strategyforPredicate.put(predicate, strategy);
+					
+					if (strategy.equals("syncsourceNkeeplocalWresolvedconflicts")) 
+						predicates_toResolve.add(predicate);
+					if (strategy.equals("syncsourceNkeeplocalBnotconflicts")) 
+						predicates_notToResolve.add(predicate);	
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	public static void create (Map<String, String> strategyforPredicate) {
+		try {
+			DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+
+			Document doc = docBuilder.newDocument();
+			Element rootElement = doc.createElement("Predicate_Strategy");
+			doc.appendChild(rootElement);
+
+			Iterator<String> keySetIterator = strategyforPredicate.keySet().iterator();
+			while(keySetIterator.hasNext()) {	
+				String key = keySetIterator.next();
+				String value = strategyforPredicate.get(key);
+
+				Element st = doc.createElement("Predicate");
+				rootElement.appendChild(st);
+				st.setAttribute("name", key);					
+				st.setAttribute("strategy", value);		
+			}		
+			
+			// write the content into xml file
+			TransformerFactory transformerFactory = TransformerFactory.newInstance();
+			Transformer transformer = transformerFactory.newTransformer();
+			transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+			transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4");
+			DOMSource source = new DOMSource(doc);
+
+			StreamResult result = new StreamResult(new File(filename));
+			transformer.transform(source, result);
+		} catch (DOMException|ParserConfigurationException|TransformerException e) {
+			e.printStackTrace();
+		}
+
+	}
+
 	
 	public static List<String> getPredicates (String filename) throws IOException {
 		
@@ -177,6 +261,9 @@ public class configure {
 		
 		S1_Add_triplesize = 0;
 		S2_Add_triplesize = 0;
+		
+		Conflict_Finder.conflicts_Finder.s3 = 0;
+		Conflict_Finder.conflicts_Finder.CDRTime = 0;
 		
 	}
 	private static void createFiles (String SyncSrcAdd, String SyncSrcDel, String SyncTarAdd, String SyncTarDel) throws IOException { 

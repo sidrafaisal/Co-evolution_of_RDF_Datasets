@@ -14,21 +14,20 @@ import co_evolution_Manager.configure;
 public class conflicts_Finder {
 
 	public static boolean resolve;
-	public static long identificationTime = 0;
-	public static long resolutionTime = 0;
-
-	public static long s3 = 0;
+	public static long CDRTime;
+	public static long resolutionTimes;
+	public static long s3;
 
 	public static void identifyConflicts(boolean r) throws RiotException, FileNotFoundException, AddDeniedException, OWLOntologyCreationException{
 		resolve = r;
-		long starttriples, startTime = 0;
+		long starttriples = 0, 	startTime = System.currentTimeMillis();
 
 		if (configure.sourceAdditionsChangeset != null) { 
 			Model omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);		
 			starttriples = omodel.size() ;
-			
+			omodel.close();
 			source_Delta.apply();					//Step 1 & 2
-
+			omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);	
 			long endtriples = omodel.size() ;
 			omodel.close();
 			s3 += (endtriples - starttriples);
@@ -36,24 +35,17 @@ public class conflicts_Finder {
 		
 		applyDelTarget();								//Step 3
 
-	//	if (configure.SyncTarAdd!=null) {
 			Model omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);		
 			starttriples = omodel.size();
-			
+			omodel.close();
 			applyAddTarget();								//Step 4
-			
+			omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);				
 			long endtriples = omodel.size() ;
 			omodel.close();
 			s3 += (endtriples - starttriples);
-	//	}
-System.out.println(s3);
-		long endTime   = System.currentTimeMillis();
-		identificationTime += source_Delta.identificationTime + (endTime - startTime);		
-		source_Delta.identificationTime = 0;
-		
-		resolutionTime += source_Delta.resolutionTime ;
-		source_Delta.resolutionTime = 0;
 
+		long endTime   = System.currentTimeMillis();
+		CDRTime += CDRTime + (endTime - startTime);		
 	}	
 
 	/*Apply rest of the changes directly*/

@@ -49,11 +49,9 @@ public class source_Delta {
 	public static long number_Of_ConflictingTriples = 0;
 	public static long number_Of_ResolvedTriples = 0;
 
-	public static long resolutionTime = 0;
-	public static long identificationTime = 0;
 	public static Map <String, Integer> predicateFunctionUseCounter = new HashMap <String, Integer> ();
 	public static long [] number_Of_caseTriples = new long [8];
-	static Model SyncTarAdd_model, SyncSrcAdd_model, SyncSrcDel_model, TarAdd_model, SyncTarDel_model;
+	static Model SrcAdd_model, SyncTarAdd_model, SyncSrcAdd_model, SyncSrcDel_model, TarAdd_model, SyncTarDel_model;
 
 	public static void apply () throws RiotException, FileNotFoundException, AddDeniedException, OWLOntologyCreationException {
 
@@ -83,18 +81,14 @@ public class source_Delta {
 				TarAdd_model.write(new FileOutputStream(configure.targetAdditionsChangeset), configure.fileSyntax); //resolved values are of source
 			TarAdd_model.close();
 			}
-		identificationTime = identificationTime - resolutionTime;
-
 	}
 
 	/*Find conflicts for source additions changeset: Pick each triple s1,p1,o1 from source additions changeset and
 	  check for s1,p1,o2 in target changesets and inital target*/
 
 	public static void additions_changeset () throws FileNotFoundException, org.apache.jena.riot.RiotException, AddDeniedException, OWLOntologyCreationException{		
-		long startTime = System.currentTimeMillis();
-
 		if (configure.sourceAdditionsChangeset != null) {
-			Model SrcAdd_model = FileManager.get().loadModel(configure.sourceAdditionsChangeset, configure.fileSyntax);
+			SrcAdd_model = FileManager.get().loadModel(configure.sourceAdditionsChangeset, configure.fileSyntax);
 			StmtIterator iter = SrcAdd_model.listStatements();
 
 			while (iter.hasNext()) {
@@ -188,15 +182,14 @@ public class source_Delta {
 				}					
 
 				// modified by source and modified by target				
-				else if	(flag_DS && flag_T && flag_DT && flag_AT)  {
+				else if( (flag_DS && flag_T && flag_DT && flag_AT) || 	(flag_DS && !flag_T && flag_DT && flag_AT)) {
+
+					System.out.println("Im called are you ");
 					resolve(stmt, conflictingTriplesAdditionTarget);
 					number_Of_caseTriples [5] += 1;
 				}			
 			}	
-
-			SrcAdd_model.close();
-			long endTime   = System.currentTimeMillis();
-			identificationTime = identificationTime + (endTime - startTime);			
+			SrcAdd_model.close();		
 		} 	
 	}
 
@@ -210,19 +203,26 @@ public class source_Delta {
 					SyncTarAdd_model.add(stmt);
 
 				SyncTarAdd_model.getGraph().add(t);
-				SyncSrcAdd_model.getGraph().add(t);
+				Statement src_s = ResourceFactory.createStatement( 
+						ResourceFactory.createResource(t.getSubject().toString()),
+						ResourceFactory.createProperty(t.getPredicate().toString()),
+						ResourceFactory.createTypedLiteral(t.getObject())
+						);
+				if (!SrcAdd_model.contains(src_s))
+					SyncSrcAdd_model.getGraph().add(t);
 
 			} else {
-				long srt = System.currentTimeMillis();
 				String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getURIstoResolve (stmt.getObject(), t), "String"); 
-
-				long ert   = System.currentTimeMillis();
-				resolutionTime = resolutionTime + (ert - srt);
-
 				if (t.getObject().toString().equals(rv))
 				{
 					SyncTarAdd_model.getGraph().add(t);
-					SyncSrcAdd_model.getGraph().add(t);
+					Statement src_s = ResourceFactory.createStatement( 
+							ResourceFactory.createResource(t.getSubject().toString()),
+							ResourceFactory.createProperty(t.getPredicate().toString()),
+							ResourceFactory.createTypedLiteral(t.getObject())
+							);
+					if (!SrcAdd_model.contains(src_s))
+						SyncSrcAdd_model.getGraph().add(t);
 					if (!SyncSrcDel_model.contains(stmt))
 						SyncSrcDel_model.add(stmt);
 				} else if (stmt.getObject().toString().equals(rv)) {
@@ -266,7 +266,13 @@ public class source_Delta {
 			if (!SyncTarAdd_model.contains(stmt))
 				SyncTarAdd_model.add(stmt);
 			SyncTarAdd_model.getGraph().add(t);
-			SyncSrcAdd_model.getGraph().add(t);
+			Statement src_s = ResourceFactory.createStatement( 
+					ResourceFactory.createResource(t.getSubject().toString()),
+					ResourceFactory.createProperty(t.getPredicate().toString()),
+					ResourceFactory.createTypedLiteral(t.getObject())
+					);
+			if (!SrcAdd_model.contains(src_s))
+				SyncSrcAdd_model.getGraph().add(t);
 		}
 	}
 	public static void resolveURI(Statement stmt, List<Triple> conflictingTriplesAdditionTarget){ 
@@ -289,7 +295,13 @@ public class source_Delta {
 					SyncTarAdd_model.add(stmt);
 
 				SyncTarAdd_model.getGraph().add(t);									
-				SyncSrcAdd_model.getGraph().add(t);
+				Statement src_s = ResourceFactory.createStatement( 
+						ResourceFactory.createResource(t.getSubject().toString()),
+						ResourceFactory.createProperty(t.getPredicate().toString()),
+						ResourceFactory.createTypedLiteral(t.getObject())
+						);
+				if (!SrcAdd_model.contains(src_s))
+					SyncSrcAdd_model.getGraph().add(t);
 
 			} else	{
 				Resource r = ResourceFactory.createResource(t.getObject().toString());
@@ -305,16 +317,19 @@ public class source_Delta {
 						SyncTarAdd_model.add(stmt);
 
 					SyncTarAdd_model.getGraph().add(t);	
-					SyncSrcAdd_model.getGraph().add(t);
+					Statement src_s = ResourceFactory.createStatement( 
+							ResourceFactory.createResource(t.getSubject().toString()),
+							ResourceFactory.createProperty(t.getPredicate().toString()),
+							ResourceFactory.createTypedLiteral(t.getObject())
+							);
+					if (!SrcAdd_model.contains(src_s))
+						SyncSrcAdd_model.getGraph().add(t);
 
 				} else if (Conflict_Finder.conflicts_Finder.resolve) {
 					String [] args = {"",""};
 					args [0] = stmt.getObject().asResource().getURI().toString();
-					args [1] = t.getObject().getURI().toString() ;	
-					long srt = System.currentTimeMillis();
+					args [1] = t.getObject().getURI().toString() ;
 					String rv = Conflict_Resolver.resolver.apply(functionforPredicate, args, "String"); 
-					long ert   = System.currentTimeMillis();
-					resolutionTime = resolutionTime + (ert - srt);
 
 					if (args[0].equals(rv))
 					{
@@ -334,7 +349,13 @@ public class source_Delta {
 
 						SyncTarAdd_model.getGraph().add(t);
 
-						SyncSrcAdd_model.getGraph().add(t);
+						Statement src_s = ResourceFactory.createStatement( 
+								ResourceFactory.createResource(t.getSubject().toString()),
+								ResourceFactory.createProperty(t.getPredicate().toString()),
+								ResourceFactory.createTypedLiteral(t.getObject())
+								);
+						if (!SrcAdd_model.contains(src_s))
+							SyncSrcAdd_model.getGraph().add(t);
 						SyncSrcDel_model.add(stmt);
 
 					} else {
@@ -362,16 +383,21 @@ public class source_Delta {
 
 		String functionforPredicate = statistics.resolutionFunctionforPredicate.get(current_Predicate);
 		int conflictingTriplesAdditionsize = conflictingTriplesAdditionTarget.size();
-
+System.out.println("w1");
 		for (int i = 0; i < conflictingTriplesAdditionsize; i++) {
-
+			System.out.println("w2");
 			Triple t = conflictingTriplesAdditionTarget.get(i);
 
-			if(stmt.asTriple().sameAs(t.getSubject(), t.getPredicate(), t.getObject())) {		//same values			
-				if (!SyncTarAdd_model.contains(stmt))
-					SyncTarAdd_model.add(stmt);					
+			if(stmt.asTriple().equals(t)) {		//same values	//.sameAs(t.getSubject(), t.getPredicate(), t.getObject())
+				if (!SyncTarAdd_model.contains(stmt))//
+					SyncTarAdd_model.add(stmt);		
+				TarAdd_model.remove(stmt);
+				Model TarDel_model = FileManager.get().loadModel(configure.targetDeletionsChangeset, configure.fileSyntax);
+				TarDel_model.remove(stmt);
+				TarDel_model.close();
+				System.out.println("w3");			
 			} else if (current_Predicate.equals("http://www.w3.org/2000/01/rdf-schema#label")) {
-				boolean is_conflict = resolveLabels(stmt, conflictingTriplesAdditionTarget, functionforPredicate);
+				resolveLabels(stmt, conflictingTriplesAdditionTarget, functionforPredicate);
 				break;								
 			} else if (current_Predicate.equals("http://www.w3.org/1999/02/22-rdf-syntax-ns#type") ) {
 				resolveType (stmt, conflictingTriplesAdditionTarget,functionforPredicate);
@@ -384,8 +410,8 @@ public class source_Delta {
 				resolveURI(stmt, conflictingTriplesAdditionTarget);
 				break;
 			} // prev case of sameAs works only for object URIs, whereas we can also have literals
-			else if (Conflict_Finder.conflicts_Finder.resolve) {
-				boolean is_conflict = resolveGenerally (stmt, conflictingTriplesAdditionTarget, functionforPredicate);	
+			else if (Conflict_Finder.conflicts_Finder.resolve) {System.out.println("w4");
+				resolveGenerally (stmt, conflictingTriplesAdditionTarget, functionforPredicate);	
 				break;
 			}
 		}
@@ -400,16 +426,19 @@ public class source_Delta {
 			Triple t= conflictingTriplesAdditionTarget.get(j);
 
 			if (object.isURIResource()) {
-
-				long srt = System.currentTimeMillis();
 				String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getURIstoResolve (object, t), "String"); 
 
-				long ert   = System.currentTimeMillis();
-				resolutionTime = resolutionTime + (ert - srt);
 				if (t.getObject().toString().equals(rv))
 				{
+					Statement src_s = ResourceFactory.createStatement( 
+							ResourceFactory.createResource(t.getSubject().toString()),
+							ResourceFactory.createProperty(t.getPredicate().toString()),
+							ResourceFactory.createTypedLiteral(t.getObject())
+							);
+					if (!SrcAdd_model.contains(src_s))
+						SyncSrcAdd_model.getGraph().add(t);
 					SyncTarAdd_model.getGraph().add(t);
-					SyncSrcAdd_model.getGraph().add(t);
+					
 					if (!SyncSrcDel_model.contains(stmt))
 						SyncSrcDel_model.add(stmt);
 				} else if (stmt.getObject().toString().equals(rv)) {
@@ -441,17 +470,19 @@ public class source_Delta {
 				is_conflict = true;
 			} else if (object.isLiteral()) {
 				String type = getType(object.asLiteral().getDatatypeURI());
-
-				long srt = System.currentTimeMillis();
 				String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getLiteralstoResolve (object, t), type); 
-				long ert   = System.currentTimeMillis();
-				resolutionTime = resolutionTime + (ert - srt);
 				is_conflict = true;
 
 				if (t.getObject().toString().equals(rv))
 				{
 					SyncTarAdd_model.getGraph().add(t);
-					SyncSrcAdd_model.getGraph().add(t);
+					Statement src_s = ResourceFactory.createStatement( 
+							ResourceFactory.createResource(t.getSubject().toString()),
+							ResourceFactory.createProperty(t.getPredicate().toString()),
+							ResourceFactory.createTypedLiteral(t.getObject())
+							);
+					if (!SrcAdd_model.contains(src_s))
+						SyncSrcAdd_model.getGraph().add(t);
 					if (!SyncSrcDel_model.contains(stmt))
 						SyncSrcDel_model.add(stmt);
 				} else if (stmt.getObject().toString().equals(rv)) {
@@ -517,7 +548,13 @@ public class source_Delta {
 				if (!SyncTarAdd_model.contains(stmt)) 
 					SyncTarAdd_model.add(stmt);	
 				SyncTarAdd_model.getGraph().add(t);					
-				SyncSrcAdd_model.getGraph().add(t);
+				Statement src_s = ResourceFactory.createStatement( 
+						ResourceFactory.createResource(t.getSubject().toString()),
+						ResourceFactory.createProperty(t.getPredicate().toString()),
+						ResourceFactory.createTypedLiteral(t.getObject())
+						);
+				if (!SrcAdd_model.contains(src_s))
+					SyncSrcAdd_model.getGraph().add(t);
 			}
 			/*	}									
 		if (maxdiff > 0) {							// pick both that are least similar
@@ -531,17 +568,19 @@ public class source_Delta {
 		} */else if (Conflict_Finder.conflicts_Finder.resolve) {
 
 			String type = getType(object.asLiteral().getDatatypeURI());
-
-			long srt = System.currentTimeMillis();
 			String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getLiteralstoResolve (object, t), type); //conflictingTriplesAdditionTarget
 
-			long ert   = System.currentTimeMillis();
-			resolutionTime = resolutionTime + (ert - srt);
 			is_conflict = true;	
 			if (t.getObject().toString().equals(rv))
 			{
 				SyncTarAdd_model.getGraph().add(t);
-				SyncSrcAdd_model.getGraph().add(t);
+				Statement src_s = ResourceFactory.createStatement( 
+						ResourceFactory.createResource(t.getSubject().toString()),
+						ResourceFactory.createProperty(t.getPredicate().toString()),
+						ResourceFactory.createTypedLiteral(t.getObject())
+						);
+				if (!SrcAdd_model.contains(src_s))
+					SyncSrcAdd_model.getGraph().add(t);
 				if (!SyncSrcDel_model.contains(stmt))
 					SyncSrcDel_model.add(stmt);
 			} else if (stmt.getObject().toString().equals(rv)) {
@@ -620,7 +659,6 @@ and check for s1,p1,o2 in target changesets and initial target*/
 
 	public static void deletions_changeset() throws org.apache.jena.riot.RiotException, FileNotFoundException{
 		if (configure.sourceDeletionsChangeset != null) {
-			long startTime = System.currentTimeMillis();
 			Model SyncTarAdd_model = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);		
 			Model model = FileManager.get().loadModel(configure.sourceDeletionsChangeset, configure.fileSyntax);
 			Model SyncSrcAdd_model = FileManager.get().loadModel(configure.SyncSrcAdd, configure.fileSyntax);
@@ -662,8 +700,6 @@ and check for s1,p1,o2 in target changesets and initial target*/
 
 			SyncSrcAdd_model.write(new FileOutputStream(configure.SyncSrcAdd), configure.fileSyntax);
 			SyncSrcAdd_model.close();					
-			long endTime   = System.currentTimeMillis();
-			identificationTime = identificationTime + (endTime - startTime);
 		}
 	}	
 

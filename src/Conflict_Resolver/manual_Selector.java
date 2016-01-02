@@ -26,7 +26,7 @@ import org.w3c.dom.NodeList;
 
 public class manual_Selector {		
 	 
-	public static String filename = "";
+	static String filename = "";
 
 	public static void select (List<String> predicates_toResolve, List<String> predicates_notToResolve) {
 		Map<String, String> resolutionFunctionforPredicate  = new HashMap<String, String>();	

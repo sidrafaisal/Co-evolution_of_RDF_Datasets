@@ -3,39 +3,36 @@ package co_evolution_Manager;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
+import java.util.concurrent.TimeUnit;
 
+import org.apache.jena.rdf.model.Model;
+import org.apache.jena.util.FileManager;
 import org.semanticweb.owlapi.model.OWLException;
 
+import co_evolution_Manager.configure;
 import strategy.strategy;
 
 public class main {
 	
 	public static Scanner scanner;
-	
-	public static String [] Hours = {"01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15",
-			"16", "17", "18", "19", "20", "21", "22", "23", "24"};
-	public static String [] Days = {"01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15",
-			"16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"};
-	public static String [] Months = {"01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"};
+	public static configure config; 
 	
 	public static void main (String[] args) {	
 		try {
 			List <String> filenames = readDatasetsLocation ("DatasetsLocation");
 			scanner = new Scanner(System.in);			
-			configure config = new configure ("NT",filenames.get(4), filenames.get(5));
+			
+			config = new configure ("NT",filenames.get(4), filenames.get(5),filenames.get(6));
 			crawl(new File(filenames.get(0)), filenames.get(0).length(), filenames.get(1), 
-					filenames.get(2), filenames.get(3), filenames.get(6));
-		//	crawl(filenames.get(0), filenames.get(0).length(), filenames.get(1), 
-			//				filenames.get(2), filenames.get(3), new File(filenames.get(6)));
-			recrawl(new File(filenames.get(3)),filenames.get(6));
-			recrawl(new File(filenames.get(2)),filenames.get(6));
+					filenames.get(2), filenames.get(3));
+			recrawl(new File(filenames.get(3)));
+			recrawl(new File(filenames.get(2)));
 
 			scanner.close();
 			
@@ -45,32 +42,22 @@ public class main {
 	}
 	
 
-	public static void recrawl(File tar, String t) throws FileNotFoundException{
+	public static void recrawl(File tar) throws IOException{
 		List<String> arr = new ArrayList<String>();
 		if(tar.isDirectory()){
 			String[] srcaddList = tar.list();
-			for(String filename : srcaddList){
-
-				
-				recrawl(new File(tar, filename), t);
-				
-			}
+			for(String filename : srcaddList)
+				recrawl(new File(tar, filename));
 		} else if (tar.getName().contains("added.nt")) {
 				String parent = tar.getAbsolutePath();
 				arr.add(0, null);
 				arr.add(1, null);
 				arr.add(2, parent);
 				arr.add(3, null);
-			//	System.out.println(arr.get(0)+ arr.get(1)+ arr.get(2)+ arr.get(3)+ t);
-
-				///////////////////////////////// perform strategy
-
-				configure.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3), t);
-
+				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
 				strategy.apply ();
-				
-				emptyResources (arr);//renameOutput (t);
-			//	printStats();	
+				printStats();	
+				emptyResources (arr);	
 
 			} else if (tar.getName().contains("removed.nt")) {
 				String parent = tar.getAbsolutePath();
@@ -78,83 +65,20 @@ public class main {
 				arr.add(1, null);
 				arr.add(2, null);
 				arr.add(3, parent);
-			//	System.out.println(arr.get(0)+ arr.get(1)+ arr.get(2)+ arr.get(3)+ t);
-
-				///////////////////////////////// perform strategy
-
-				configure.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3), t);
-
+				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
 				strategy.apply ();
-		
-				emptyResources (arr);//renameOutput (t);
-			//	printStats();		
-
+				printStats();	
+				emptyResources (arr);
 		}
-	}
-	/*public static void crawl(String srcadd, int t, String srcdel, String taradd, String tardel, File p){
-
-for (int i = 0 ; i < Months.length ; i++)
-	for (int j = 0 ; j < Days.length ; j++)
-		for (int k = 0 ; k < Hours.length ; k++) {
-			System.out.print(Months[i]+"/"+Days[j]+"/"+Hours[k]+"/");
+	}	
 	
-			String[] src_additionList = null;
-//			List <String> src_additionList = new ArrayList <String> ();
-			File src_addition = new File ( srcadd+Months[i]+"/"+Days[j]+"/"+Hours[k] );
-			if(src_addition.isDirectory()){
-				src_additionList  = src_addition.list();
-	//			for(String filename : list){
-	//				src_additionList.add(filename);
-	//			}
-				}
-			
-			String[] src_deletionList= null; 
-			//List <String> src_deletionList = new ArrayList <String> ();			
-			File src_deletion = new File (srcdel+Months[i]+"/"+Days[j]+"/"+Hours[k]);
-			if(src_deletion.isDirectory()){
-				src_deletionList = src_deletion.list();
-			//	for(String filename : list){
-			//		src_deletionList.add(filename);
-			//	}
-				}
-			String[] tar_additionList = null;
-//			List <String> tar_additionList = new ArrayList <String> ();				
-			File tar_addition = new File (taradd+Months[i]+"/"+Days[j]+"/"+Hours[k]);
-			if(tar_addition.isDirectory()){
-				tar_additionList = tar_addition.list();
-	//			for(String filename : list){
-	//				tar_additionList.add(filename);
-	//			}
-				}
-			String[] tar_deletionList = null;
-		//	List <String> tar_deletionList = new ArrayList <String> ();			
-			File tar_deletion = new File(tardel+Months[i]+"/"+Days[j]+"/"+Hours[k]);
-			if(tar_deletion.isDirectory()){
-				tar_deletionList = tar_deletion.list();
-			//	for(String filename : list){
-			//		tar_deletionList.add(filename);
-			//	}
-				}
-			int sa=0,sd=0,ta=0,td=0, max = Math.max(src_deletionList.length, src_additionList.length);
-			for (;sa < ; sd < ;) {
-				
-			}
-
-		}
-	}*/
-
-	
-	
-	public static void crawl(File srcadd, int i, String srcdel, String taradd, String tardel, String t) throws FileNotFoundException{
+	public static void crawl(File srcadd, int i, String srcdel, String taradd, String tardel) throws IOException{
 
 		List<String> arr = new ArrayList<String>();
 		if(srcadd.isDirectory()){
 			String[] srcaddList = srcadd.list();
-			for(String filename : srcaddList){
-				crawl(new File(srcadd, filename), i, srcdel, taradd, tardel, t);	
-			
-			}
-
+			for(String filename : srcaddList)
+				crawl(new File(srcadd, filename), i, srcdel, taradd, tardel);	
 
 			if (srcadd.getAbsolutePath().length()>i) {
 				File sdfile = new File(srcdel + (srcadd.getAbsolutePath()).substring(i));
@@ -180,16 +104,10 @@ for (int i = 0 ; i < Months.length ; i++)
 								arr.add(3, tdfile.getAbsolutePath());
 							else 
 								arr.add(3, null);
-					//		System.out.println(arr.get(0)+ arr.get(1)+ arr.get(2)+ arr.get(3)+ t);
-							configure.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3), t);	
-						
+							config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));							
 							strategy.apply ();
-
+							printStats();	
 							emptyResources (arr);
-							//renameOutput (t);
-					//		printStats();	
-							
-
 						}
 					}
 				}
@@ -226,18 +144,10 @@ for (int i = 0 ; i < Months.length ; i++)
 				else 
 					arr.add(3, null);
 
-
-			//	System.out.println(arr.get(0)+ arr.get(1)+ arr.get(2)+ arr.get(3)+ t);
-				///////////////////////////////// perform strategy
-
-				configure.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3), t);
-
+				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
 				strategy.apply ();
-
-							emptyResources (arr);
-							//renameOutput (t);
-		//		printStats();	
-
+				printStats();	
+				emptyResources (arr);
 			} 
 		}
 	}
@@ -281,4 +191,29 @@ content = "\n"+ content ;
 		}
 	}
 
+	public static void printStats() throws IOException{
+		String	time_S1 = String.format("%d min", TimeUnit.MILLISECONDS.toMinutes(configure.time_S1)), 
+				time_S2 = String.format("%d min", TimeUnit.MILLISECONDS.toMinutes(configure.time_S2)),
+				CDRTime = String.format("%d min", TimeUnit.MILLISECONDS.toMinutes(Conflict_Finder.conflicts_Finder.CDRTime));
+		
+		write("exetimes", time_S1+ ", " + time_S2+", " + CDRTime);
+		
+		Model SyncSrcAdd_model = FileManager.get().loadModel(configure.SyncSrcAdd, configure.fileSyntax);
+		Model SyncSrcDel_model = FileManager.get().loadModel(configure.SyncSrcDel, configure.fileSyntax);
+		
+		write("datasize", Long.toString(configure.S1_Add_triplesize)+", "+Long.toString(configure.S1_Del_triplesize)+","+
+				Long.toString(configure.S2_Add_triplesize)+","+Long.toString(configure.S2_Del_triplesize)+","+ 
+				Long.toString(Conflict_Finder.conflicts_Finder.s3) +", "+ Long.toString(SyncSrcAdd_model.size()) + ", "+ 
+				Long.toString(SyncSrcDel_model.size()));
+		
+		SyncSrcAdd_model.close();			
+		SyncSrcDel_model.close();	
+		
+		write("input sizes", Long.toString(configure.getDatasetSize(configure.initialTarget)) +", "+
+				Long.toString(configure.getDatasetSize(configure.sourceAdditionsChangeset))+ ", " +
+				Long.toString(configure.getDatasetSize(configure.sourceDeletionsChangeset))+ ", " +
+				Long.toString(configure.getDatasetSize(configure.targetAdditionsChangeset))+ ", " +
+				Long.toString(configure.getDatasetSize(configure.targetDeletionsChangeset)));			
+	}
+	
 }
