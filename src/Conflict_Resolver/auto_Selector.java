@@ -1,7 +1,6 @@
 package Conflict_Resolver;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -36,7 +35,7 @@ public class auto_Selector {
 	public static void select () {	
 		try {
 			Map<String, String> resolutionFunctionforPredicate  = new HashMap<String, String>();
-			List<String> predicateList = getPredicates (); // get the required predicates to be extracted from auto_selector file
+			List<String> predicateList = co_evolution_Manager.configure.predicateList; // get the required predicates to be extracted from auto_selector file
 		
 			Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new File("auto_FunctionSelector.xml"));
 			doc.getDocumentElement().normalize();
@@ -119,7 +118,7 @@ public class auto_Selector {
 	public static void modify () {
 		try {
 
-			List<String> predicateList = getPredicates();  // get the required predicates to be extracted from auto_selector file
+			List<String> predicateList = co_evolution_Manager.configure.predicateList;  // get the required predicates to be extracted from auto_selector file
 
 			Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new File("auto_FunctionSelector.xml"));
 			doc.getDocumentElement().normalize();
@@ -241,20 +240,6 @@ public class auto_Selector {
 
 	public static void set (String p, String rf){	
 		statistics.resolutionFunctionforPredicate.put(p, rf);  
-	}
-
-	public static List<String> getPredicates () throws IOException {
-		/*List<String> predicateList = new ArrayList<String>();
-
-		BufferedReader br = new BufferedReader(new FileReader());
-
-		String line = null;
-
-		while ((line = br.readLine()) != null) {
-			predicateList.add(line);
-		}
-		br.close();*/
-		return co_evolution_Manager.configure.predicateList;
 	}
 
 	public static void writeXML (Document doc, String filename) throws TransformerException {

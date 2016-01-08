@@ -32,7 +32,7 @@ public class manual_Selector {
 		Map<String, String> resolutionFunctionforPredicate  = new HashMap<String, String>();	
 		
 		//int pos	= co_evolution_Manager.configure.newTarget.indexOf(".");.substring(0, pos)
-		filename = "manual_FunctionSelector"+ co_evolution_Manager.configure.initialTarget+".xml";
+		filename = "manual_FunctionSelector.xml";
 		File file = new File(filename);
 
 		if(!file.exists()) 	{
@@ -110,10 +110,9 @@ public class manual_Selector {
 			StreamResult result = new StreamResult(new File(filename));
 			transformer.transform(source, result);
 
-			auto_Selector.record ( );
+			//auto_Selector.record ( );
 
 		} catch (DOMException|ParserConfigurationException|TransformerException e) {
-			System.out.println(""+e);
 			e.printStackTrace();
 		}
 
@@ -153,7 +152,6 @@ public class manual_Selector {
 				}
 			}
 		} catch (Exception e) {
-			System.out.println(""+e);
 			e.printStackTrace();
 		}
 	}

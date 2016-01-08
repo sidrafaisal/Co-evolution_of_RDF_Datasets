@@ -76,7 +76,6 @@ public class statistics {
 			}		
 			mostFrequentValue.put(predicate, value);
 		} catch (org.apache.jena.riot.RiotException e) {
-			System.out.println(""+e);
 			e.printStackTrace();
 		}
 	}
@@ -119,7 +118,6 @@ public class statistics {
 				return "target";
 
 		} catch (org.apache.jena.riot.RiotException e) {
-			System.out.println(""+e);
 			e.printStackTrace();
 			return "source"; 	//default value
 		}

@@ -119,7 +119,7 @@ public class configure {
 	
 	private static void selectStrategy() throws OWLException {		
 		strategyforPredicate  = new HashMap<String, String>();
-		filename = "strategy_"+ initialTarget+".xml";
+		filename = "strategy.xml";
 		File file = new File(filename);
 
 		if(!file.exists()) 	{
@@ -163,9 +163,8 @@ public class configure {
 			if (r.equals("0")) {
 				Conflict_Resolver.manual_Selector.select(predicates_toResolve, predicates_notToResolve);
 				resolver.manual_selector = true;
-			}
-			else if (r.equals("1")) {
-			//	Conflict_Resolver.function_Auto_Selector.select(predicates_toResolve, predicates_notToResolve);
+			} else if (r.equals("1")) {
+			//Conflict_Resolver.function_Auto_Selector.select(predicates_toResolve, predicates_notToResolve);
 				resolver.auto_selector = true;
 			}
 
@@ -262,7 +261,7 @@ public class configure {
 		S1_Add_triplesize = 0;
 		S2_Add_triplesize = 0;
 		
-		Conflict_Finder.conflicts_Finder.s3 = 0;
+		Conflict_Finder.conflicts_Finder.S3_Add_triplesize = 0;
 		Conflict_Finder.conflicts_Finder.CDRTime = 0;
 		
 	}

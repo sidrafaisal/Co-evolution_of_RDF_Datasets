@@ -16,7 +16,7 @@ public class conflicts_Finder {
 	public static boolean resolve;
 	public static long CDRTime;
 	public static long resolutionTimes;
-	public static long s3;
+	public static long S3_Add_triplesize;
 
 	public static void identifyConflicts(boolean r) throws RiotException, FileNotFoundException, AddDeniedException, OWLOntologyCreationException{
 		resolve = r;
@@ -30,7 +30,7 @@ public class conflicts_Finder {
 			omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);	
 			long endtriples = omodel.size() ;
 			omodel.close();
-			s3 += (endtriples - starttriples);
+			S3_Add_triplesize += (endtriples - starttriples);
 		}
 		
 		applyDelTarget();								//Step 3
@@ -42,7 +42,7 @@ public class conflicts_Finder {
 			omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);				
 			long endtriples = omodel.size() ;
 			omodel.close();
-			s3 += (endtriples - starttriples);
+			S3_Add_triplesize += (endtriples - starttriples);
 
 		long endTime   = System.currentTimeMillis();
 		CDRTime += CDRTime + (endTime - startTime);		

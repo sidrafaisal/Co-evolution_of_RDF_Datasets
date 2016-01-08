@@ -3,6 +3,8 @@ package co_evolution_Manager;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -12,6 +14,8 @@ import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.jena.rdf.model.Model;
+import org.apache.jena.rdf.model.Statement;
+import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.util.FileManager;
 import org.semanticweb.owlapi.model.OWLException;
 
@@ -22,6 +26,7 @@ public class main {
 	
 	public static Scanner scanner;
 	public static configure config; 
+	public static long duplicateTriples = 0; 
 	
 	public static void main (String[] args) {	
 		try {
@@ -33,6 +38,7 @@ public class main {
 					filenames.get(2), filenames.get(3));
 			recrawl(new File(filenames.get(3)));
 			recrawl(new File(filenames.get(2)));
+			System.out.println("duplicateTriples="+duplicateTriples);
 
 			scanner.close();
 			
@@ -55,10 +61,11 @@ public class main {
 				arr.add(2, parent);
 				arr.add(3, null);
 				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
+				printInput();
 				strategy.apply ();
 				printStats();	
 				emptyResources (arr);	
-
+				
 			} else if (tar.getName().contains("removed.nt")) {
 				String parent = tar.getAbsolutePath();
 				arr.add(0, null);
@@ -66,6 +73,7 @@ public class main {
 				arr.add(2, null);
 				arr.add(3, parent);
 				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
+				printInput();
 				strategy.apply ();
 				printStats();	
 				emptyResources (arr);
@@ -104,10 +112,13 @@ public class main {
 								arr.add(3, tdfile.getAbsolutePath());
 							else 
 								arr.add(3, null);
-							config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));							
+							config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));		
+							printInput();
 							strategy.apply ();
 							printStats();	
 							emptyResources (arr);
+
+							
 						}
 					}
 				}
@@ -145,9 +156,11 @@ public class main {
 					arr.add(3, null);
 
 				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
+				printInput();
 				strategy.apply ();
 				printStats();	
 				emptyResources (arr);
+			
 			} 
 		}
 	}
@@ -190,7 +203,15 @@ content = "\n"+ content ;
 			e.printStackTrace();
 		}
 	}
-
+	public static void printInput() throws IOException{
+		
+		write("input sizes", Long.toString(configure.getDatasetSize(configure.initialTarget)) +", "+
+				Long.toString(configure.getDatasetSize(configure.sourceAdditionsChangeset))+ ", " +
+				Long.toString(configure.getDatasetSize(configure.sourceDeletionsChangeset))+ ", " +
+				Long.toString(configure.getDatasetSize(configure.targetAdditionsChangeset))+ ", " +
+				Long.toString(configure.getDatasetSize(configure.targetDeletionsChangeset)));			
+	}
+	
 	public static void printStats() throws IOException{
 		String	time_S1 = String.format("%d min", TimeUnit.MILLISECONDS.toMinutes(configure.time_S1)), 
 				time_S2 = String.format("%d min", TimeUnit.MILLISECONDS.toMinutes(configure.time_S2)),
@@ -203,17 +224,50 @@ content = "\n"+ content ;
 		
 		write("datasize", Long.toString(configure.S1_Add_triplesize)+", "+Long.toString(configure.S1_Del_triplesize)+","+
 				Long.toString(configure.S2_Add_triplesize)+","+Long.toString(configure.S2_Del_triplesize)+","+ 
-				Long.toString(Conflict_Finder.conflicts_Finder.s3) +", "+ Long.toString(SyncSrcAdd_model.size()) + ", "+ 
+				Long.toString(Conflict_Finder.conflicts_Finder.S3_Add_triplesize) +", "+ Long.toString(SyncSrcAdd_model.size()) + ", "+ 
 				Long.toString(SyncSrcDel_model.size()));
 		
 		SyncSrcAdd_model.close();			
 		SyncSrcDel_model.close();	
+		applySyncDelta();
+	}
+	
+	public static void applySyncDelta () throws IOException {
+		Model SyncTarAdd_model = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);
+		Model SyncTarDel_model = FileManager.get().loadModel(configure.SyncTarDel, configure.fileSyntax);			
+		Model Tar_model = FileManager.get().loadModel(configure.initialTarget, configure.fileSyntax);
+//		System.out.println("before"+configure.getDatasetSize(configure.initialTarget));
+//		Tar_model.add(SyncTarAdd_model);
 		
-		write("input sizes", Long.toString(configure.getDatasetSize(configure.initialTarget)) +", "+
-				Long.toString(configure.getDatasetSize(configure.sourceAdditionsChangeset))+ ", " +
-				Long.toString(configure.getDatasetSize(configure.sourceDeletionsChangeset))+ ", " +
-				Long.toString(configure.getDatasetSize(configure.targetAdditionsChangeset))+ ", " +
-				Long.toString(configure.getDatasetSize(configure.targetDeletionsChangeset)));			
+		
+		StmtIterator iter = SyncTarAdd_model.listStatements();
+		while (iter.hasNext()) {
+			Statement stmt = iter.nextStatement();  // get next statement		 
+			if (Tar_model.contains(stmt))
+				duplicateTriples++;
+			Tar_model.add(stmt);
+		}
+		
+		iter = SyncTarDel_model.listStatements();
+		while (iter.hasNext()) {
+			Statement stmt = iter.nextStatement();  // get next statement		 
+			Tar_model.remove(stmt);
+		}
+		Tar_model.write(new FileOutputStream(configure.initialTarget), configure.fileSyntax);
+		SyncTarAdd_model.close();
+		SyncTarDel_model.close();
+		Tar_model.close();	
+	//	System.out.println("after"+configure.getDatasetSize(configure.initialTarget));
+		
+		File nt = new File(configure.SyncTarAdd);
+		nt.delete();
+		if(!nt.exists())
+			nt.createNewFile();		
+		
+		nt = new File(configure.SyncTarDel);
+		nt.delete();
+		if(!nt.exists())
+			nt.createNewFile();
 	}
 	
 }
