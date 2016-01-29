@@ -3,7 +3,6 @@ package co_evolution_Manager;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -26,10 +25,22 @@ public class main {
 	
 	public static Scanner scanner;
 	public static configure config; 
-	public static long duplicateTriples = 0; 
+	public static long duplicateTriples = 0, 
+	unique_objects_synTar = 0, 
+	unique_objects_inTar = 0,  
+	unique_objects_srcchangeset = 0, 
+	unique_objects_tarchangeset = 0, time = 0;
 	
 	public static void main (String[] args) {	
 		try {
+			
+			write("input sizes.txt", "tar, srcAdd, srcDel, tarAdd, tarDel");
+			write("exetimes.txt", "time_S1, time_S2, time_s3, time_s4, total in sec");
+			write("datasize.txt", "S1_Add_triple, S1_Del_triple, S2_Add_triple, S2_Del_triple, S3_Add_triple, S3_Del_triple,"
+					+ "S4_Add_triple, S4_Del_triple,"+ "conflictingTriples_S3, Conflicting_triples_s4, SyncSrcAdd, SyncSrcDel, SyncTarAdd, SyncTarDel");
+	
+		write("completeness.txt", "SynTar, duplicates, simlpedupicatein tar, funobj_Triples, unique objects in synTar, in initial dataset, in src changeset, in tar changeset");
+		
 			List <String> filenames = readDatasetsLocation ("DatasetsLocation");
 			scanner = new Scanner(System.in);			
 			
@@ -38,11 +49,12 @@ public class main {
 					filenames.get(2), filenames.get(3));
 			recrawl(new File(filenames.get(3)));
 			recrawl(new File(filenames.get(2)));
-			System.out.println("duplicateTriples="+duplicateTriples);
-
+			 	
 			scanner.close();
+
+	
 			
-		} catch (IOException | OWLException e) {
+		} catch (IOException | OWLException e) { 
 			e.printStackTrace();
 		}
 	}
@@ -62,10 +74,21 @@ public class main {
 				arr.add(3, null);
 				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
 				printInput();
+				long time = System.currentTimeMillis();
+
 				strategy.apply ();
-				printStats();	
-				emptyResources (arr);	
+				long endTime   = System.currentTimeMillis();
+				time = (endTime - time);	
 				
+				printStats();	
+				applySyncDelta();
+
+				arr.add(configure.SyncSrcAdd);
+				arr.add(configure.SyncSrcDel);
+				emptyResources (arr);	
+				resetcounters();				
+//				find_unique_objects(arr);
+
 			} else if (tar.getName().contains("removed.nt")) {
 				String parent = tar.getAbsolutePath();
 				arr.add(0, null);
@@ -74,10 +97,21 @@ public class main {
 				arr.add(3, parent);
 				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
 				printInput();
+				long time = System.currentTimeMillis();
+
 				strategy.apply ();
+				long endTime   = System.currentTimeMillis();
+				time = (endTime - time);	
+				
 				printStats();	
-				emptyResources (arr);
-		}
+				applySyncDelta();
+
+				arr.add(configure.SyncSrcAdd);
+				arr.add(configure.SyncSrcDel);
+				emptyResources (arr);	
+				resetcounters();				
+//				find_unique_objects(arr);
+			}
 	}	
 	
 	public static void crawl(File srcadd, int i, String srcdel, String taradd, String tardel) throws IOException{
@@ -112,13 +146,22 @@ public class main {
 								arr.add(3, tdfile.getAbsolutePath());
 							else 
 								arr.add(3, null);
-							config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));		
+							config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
 							printInput();
-							strategy.apply ();
-							printStats();	
-							emptyResources (arr);
+							long time = System.currentTimeMillis();
 
+							strategy.apply ();
+							long endTime   = System.currentTimeMillis();
+							time = (endTime - time);	
 							
+							printStats();	
+							applySyncDelta();
+
+							arr.add(configure.SyncSrcAdd);
+							arr.add(configure.SyncSrcDel);
+							emptyResources (arr);	
+							resetcounters();				
+//							find_unique_objects(arr);
 						}
 					}
 				}
@@ -154,13 +197,22 @@ public class main {
 					arr.add(3, tdfile.getAbsolutePath());
 				else 
 					arr.add(3, null);
-
 				config.configureFiles (arr.get(0), arr.get(1), arr.get(2), arr.get(3));
 				printInput();
+				long time = System.currentTimeMillis();
+
 				strategy.apply ();
+				long endTime   = System.currentTimeMillis();
+				time = (endTime - time);	
+				
 				printStats();	
-				emptyResources (arr);
-			
+				applySyncDelta();
+
+				arr.add(configure.SyncSrcAdd);
+				arr.add(configure.SyncSrcDel);
+				emptyResources (arr);	
+				resetcounters();				
+//				find_unique_objects(arr);
 			} 
 		}
 	}
@@ -178,8 +230,7 @@ content = "\n"+ content ;
 			bw.close();
 	}
 	
-	public static List<String> readDatasetsLocation (String filename) throws IOException{
-		
+	public static List<String> readDatasetsLocation (String filename) throws IOException {		
 	BufferedReader	br = new BufferedReader(new FileReader(filename));
 	List <String> filenames = new ArrayList <String>();
 		String line = null;
@@ -189,6 +240,7 @@ content = "\n"+ content ;
 		br.close();
 		return filenames;
 	}
+	
 	public static void emptyResources (List<String> f) {
 		try {
 			File file;
@@ -204,8 +256,9 @@ content = "\n"+ content ;
 		}
 	}
 	public static void printInput() throws IOException{
-		
-		write("input sizes", Long.toString(configure.getDatasetSize(configure.initialTarget)) +", "+
+		write("input file names.txt", configure.sourceAdditionsChangeset+"--"+ configure.sourceDeletionsChangeset+"--"+ 
+				configure.targetAdditionsChangeset+"--"+  configure.targetDeletionsChangeset);
+		write("input sizes.txt", Long.toString(configure.getDatasetSize(configure.initialTarget)) +", "+
 				Long.toString(configure.getDatasetSize(configure.sourceAdditionsChangeset))+ ", " +
 				Long.toString(configure.getDatasetSize(configure.sourceDeletionsChangeset))+ ", " +
 				Long.toString(configure.getDatasetSize(configure.targetAdditionsChangeset))+ ", " +
@@ -213,23 +266,38 @@ content = "\n"+ content ;
 	}
 	
 	public static void printStats() throws IOException{
-		String	time_S1 = String.format("%d min", TimeUnit.MILLISECONDS.toMinutes(configure.time_S1)), 
-				time_S2 = String.format("%d min", TimeUnit.MILLISECONDS.toMinutes(configure.time_S2)),
-				CDRTime = String.format("%d min", TimeUnit.MILLISECONDS.toMinutes(Conflict_Finder.conflicts_Finder.CDRTime));
+		String	time_S1 = String.format("%d", TimeUnit.MILLISECONDS.toSeconds(configure.time_S1)), 
+				time_S2 = String.format("%d", TimeUnit.MILLISECONDS.toSeconds(configure.time_S2)),
+				time_S3 = String.format("%d", TimeUnit.MILLISECONDS.toSeconds(Conflict_Finder.conflicts_Finder.time_S3)),
+				time_S4 = String.format("%d", TimeUnit.MILLISECONDS.toSeconds(Conflict_Finder.conflicts_Finder.time_S4)),
+		total_time = String.format("%d", TimeUnit.MILLISECONDS.toSeconds(time));
 		
-		write("exetimes", time_S1+ ", " + time_S2+", " + CDRTime);
+		write("exetimes.txt", time_S1+ ", " + time_S2+", " + time_S3+", "+ time_S4+", "+ total_time);
 		
 		Model SyncSrcAdd_model = FileManager.get().loadModel(configure.SyncSrcAdd, configure.fileSyntax);
 		Model SyncSrcDel_model = FileManager.get().loadModel(configure.SyncSrcDel, configure.fileSyntax);
-		
-		write("datasize", Long.toString(configure.S1_Add_triplesize)+", "+Long.toString(configure.S1_Del_triplesize)+","+
+		Model SyncTarAdd_model = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);
+		Model SyncTarDel_model = FileManager.get().loadModel(configure.SyncTarDel, configure.fileSyntax);			
+
+		write("datasize.txt", Long.toString(configure.S1_Add_triplesize)+", "+Long.toString(configure.S1_Del_triplesize)+","+
 				Long.toString(configure.S2_Add_triplesize)+","+Long.toString(configure.S2_Del_triplesize)+","+ 
-				Long.toString(Conflict_Finder.conflicts_Finder.S3_Add_triplesize) +", "+ Long.toString(SyncSrcAdd_model.size()) + ", "+ 
-				Long.toString(SyncSrcDel_model.size()));
+				Long.toString(Conflict_Finder.conflicts_Finder.S3_Add_triplesize) +", "+ 
+				Long.toString(Conflict_Finder.conflicts_Finder.S3_Del_triplesize) +", "+ 
+				Long.toString(Conflict_Finder.conflicts_Finder.S4_Add_triplesize) +", "+ 
+				Long.toString(Conflict_Finder.conflicts_Finder.S4_Del_triplesize) +", "+ 
+				Long.toString(Conflict_Finder.source_Delta.number_Of_conflictingTriples_S3) +", "+
+				Long.toString(Conflict_Finder.source_Delta.number_Of_ConflictingTriples) +", "+
+				
+				Long.toString(SyncSrcAdd_model.size()) + ", "+  Long.toString(SyncSrcDel_model.size())+", "+ 
+				Long.toString(SyncTarAdd_model.size()) + ", "+ Long.toString(SyncTarDel_model.size()));
 		
+		unique_objects_srcchangeset = SyncSrcAdd_model.listObjects().toList().size();
+		unique_objects_tarchangeset = SyncTarAdd_model.listObjects().toList().size();
+
 		SyncSrcAdd_model.close();			
 		SyncSrcDel_model.close();	
-		applySyncDelta();
+		SyncTarAdd_model.close();
+		SyncTarDel_model.close();
 	}
 	
 	public static void applySyncDelta () throws IOException {
@@ -237,9 +305,11 @@ content = "\n"+ content ;
 		Model SyncTarDel_model = FileManager.get().loadModel(configure.SyncTarDel, configure.fileSyntax);			
 		Model Tar_model = FileManager.get().loadModel(configure.initialTarget, configure.fileSyntax);
 //		System.out.println("before"+configure.getDatasetSize(configure.initialTarget));
-//		Tar_model.add(SyncTarAdd_model);
+//		Tar_model.add(SyncTarAdd_model);	
 		
-		
+	//	Tar_model = FileManager.get().loadModel(configure.initialTarget, configure.fileSyntax);
+		unique_objects_inTar = Tar_model.listObjects().toList().size();
+
 		StmtIterator iter = SyncTarAdd_model.listStatements();
 		while (iter.hasNext()) {
 			Statement stmt = iter.nextStatement();  // get next statement		 
@@ -247,7 +317,7 @@ content = "\n"+ content ;
 				duplicateTriples++;
 			Tar_model.add(stmt);
 		}
-		
+	
 		iter = SyncTarDel_model.listStatements();
 		while (iter.hasNext()) {
 			Statement stmt = iter.nextStatement();  // get next statement		 
@@ -259,6 +329,17 @@ content = "\n"+ content ;
 		Tar_model.close();	
 	//	System.out.println("after"+configure.getDatasetSize(configure.initialTarget));
 		
+		Tar_model = FileManager.get().loadModel(configure.initialTarget, configure.fileSyntax);
+		
+		unique_objects_synTar = Tar_model.listObjects().toList().size();
+		Tar_model.close();
+		write("completeness.txt",
+				Long.toString(configure.getDatasetSize(configure.initialTarget)) +", "+
+				Long.toString(duplicateTriples) + ", " +Long.toString(Conflict_Finder.source_Delta.duplicate_Triples)+", "+
+				Long.toString(Conflict_Finder.source_Delta.funobj_Triples)+", "+
+				Long.toString(unique_objects_synTar)+", "+ Long.toString(unique_objects_inTar)+", "+ 
+				Long.toString(unique_objects_srcchangeset)+", "+ Long.toString(unique_objects_tarchangeset));
+		
 		File nt = new File(configure.SyncTarAdd);
 		nt.delete();
 		if(!nt.exists())
@@ -269,5 +350,11 @@ content = "\n"+ content ;
 		if(!nt.exists())
 			nt.createNewFile();
 	}
-	
+	public static void resetcounters(){
+		duplicateTriples = 0;
+				unique_objects_synTar=0; 
+				unique_objects_inTar=0;
+				unique_objects_srcchangeset=0; 
+				unique_objects_tarchangeset=0;
+	}
 }

@@ -1,98 +1,103 @@
 package Conflict_Finder;
 
+import strategy.strategy;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import org.apache.jena.rdf.model.Model;
-import org.apache.jena.rdf.model.Statement;
+import org.apache.jena.rdf.model.Property;
+import org.apache.jena.rdf.model.RDFNode;
+import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.riot.RiotException;
 import org.apache.jena.shared.AddDeniedException;
-import org.apache.jena.util.FileManager;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 
 import co_evolution_Manager.configure;
 public class conflicts_Finder {
 
 	public static boolean resolve;
-	public static long CDRTime;
-	public static long resolutionTimes;
+	public static long time_S3, time_S4;
 	public static long S3_Add_triplesize;
+	public static long S3_Del_triplesize;
+	public static long S4_Add_triplesize;
+	public static long S4_Del_triplesize;
 
-	public static void identifyConflicts(boolean r) throws RiotException, FileNotFoundException, AddDeniedException, OWLOntologyCreationException{
+	public static void identifyConflicts(Property property, boolean r) throws RiotException, FileNotFoundException, AddDeniedException, OWLOntologyCreationException{
 		resolve = r;
-		long starttriples = 0, 	startTime = System.currentTimeMillis();
+		long starttriples = 0, 	startTime = 0;
 
-		if (configure.sourceAdditionsChangeset != null) { 
-			Model omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);		
-			starttriples = omodel.size() ;
-			omodel.close();
-			source_Delta.apply();					//Step 1 & 2
-			omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);	
-			long endtriples = omodel.size() ;
-			omodel.close();
-			S3_Add_triplesize += (endtriples - starttriples);
+		if (configure.sourceAdditionsChangeset != null) { 	
+			starttriples = strategy.SyncTarAdd_model.size() ;
+
+			startTime = System.currentTimeMillis();
+			source_Delta.apply(property);					//Step 1 & 2
+			long endTime   = System.currentTimeMillis();
+			if (resolve)
+				time_S4 += (endTime - startTime);		
+			else
+				time_S3 += (endTime - startTime);
+
+			long endtriples = strategy.SyncTarAdd_model.size() ;
+			increaseAddTriples(endtriples - starttriples);
+
 		}
-		
-		applyDelTarget();								//Step 3
-
-			Model omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);		
-			starttriples = omodel.size();
-			omodel.close();
-			applyAddTarget();								//Step 4
-			omodel = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);				
-			long endtriples = omodel.size() ;
-			omodel.close();
-			S3_Add_triplesize += (endtriples - starttriples);
-
+		startTime = System.currentTimeMillis();
+		applyDelTarget(property);								//Step 3
 		long endTime   = System.currentTimeMillis();
-		CDRTime += CDRTime + (endTime - startTime);		
+		if (resolve)
+			time_S4 += (endTime - startTime);		
+		else
+			time_S3 += (endTime - startTime);
+
+		starttriples = strategy.SyncTarAdd_model.size();
+		startTime = System.currentTimeMillis();
+		applyAddTarget(property);								//Step 4
+
+		endTime   = System.currentTimeMillis();
+		if (resolve)
+			time_S4 += (endTime - startTime);		
+		else
+			time_S3 += (endTime - startTime);
+		
+		long endtriples = strategy.SyncTarAdd_model.size() ;
+		increaseAddTriples(endtriples - starttriples);
+
 	}	
+
+	public static void increaseAddTriples (long value){
+		if (resolve)
+			S4_Add_triplesize += value;
+		else
+			S3_Add_triplesize += value;
+	}
+	public static void increaseDelTriples (long value){
+		if (resolve)
+			S4_Del_triplesize += value;
+		else
+			S3_Del_triplesize += value;
+	}
 
 	/*Apply rest of the changes directly*/
 
-	public static void applyDelTarget() throws FileNotFoundException, org.apache.jena.riot.RiotException{
+	public static void applyDelTarget(Property property) throws FileNotFoundException, org.apache.jena.riot.RiotException{
 		if (configure.targetDeletionsChangeset!=null)	{
-				Model sync_sd_model = FileManager.get().loadModel(configure.SyncSrcDel, configure.fileSyntax);
-				Model SyncTarDel_model = FileManager.get().loadModel(configure.SyncTarDel, configure.fileSyntax);			
+			StmtIterator iter = strategy.TarDel_model.listStatements((Resource)null, property, (RDFNode)null);
+			strategy.SyncTarDel_model.add(iter.toList());
+			strategy.SyncSrcDel_model.add(iter.toList());
 
-				Model TarDel_model = FileManager.get().loadModel(configure.targetDeletionsChangeset, configure.fileSyntax);
-				StmtIterator iter = TarDel_model.listStatements();
-				while (iter.hasNext()) {
-					Statement stmt = iter.nextStatement();  // get next statement		 
-					SyncTarDel_model.add(stmt);
-					sync_sd_model.add(stmt);
-				}
-				TarDel_model.close();	
-
-				sync_sd_model.write(new FileOutputStream(configure.SyncSrcDel), configure.fileSyntax);		
-				sync_sd_model.close();
-				
-				SyncTarDel_model.write(new FileOutputStream(configure.SyncTarDel), configure.fileSyntax);		
-				SyncTarDel_model.close();				
+			increaseDelTriples(iter.toList().size());
+			strategy.SyncSrcDel_model.write(new FileOutputStream(configure.SyncSrcDel), configure.fileSyntax);		
+			strategy.SyncTarDel_model.write(new FileOutputStream(configure.SyncTarDel), configure.fileSyntax);				
 		}
 	}
 
-	/////////////////////////////////////////////////////Step4
-	
-	public static void applyAddTarget() throws FileNotFoundException, org.apache.jena.riot.RiotException {
+	public static void applyAddTarget(Property property) throws FileNotFoundException, org.apache.jena.riot.RiotException {
 		if (configure.targetAdditionsChangeset!=null) {
-				Model sync_sa_model = FileManager.get().loadModel(configure.SyncSrcAdd, configure.fileSyntax);
-				Model tar_Add_model = FileManager.get().loadModel(configure.targetAdditionsChangeset, configure.fileSyntax);
-				Model SyncTarAdd_model = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);			
+			StmtIterator iter = strategy.TarAdd_model.listStatements((Resource)null, property, (RDFNode)null);
+			strategy.SyncSrcAdd_model.add(iter.toList());
+			strategy.SyncTarAdd_model.add(iter.toList());
+			strategy.SyncTarAdd_model.write(new FileOutputStream(configure.SyncTarAdd), configure.fileSyntax);
+			strategy.SyncSrcAdd_model.write(new FileOutputStream(configure.SyncSrcAdd), configure.fileSyntax);		
 
-				StmtIterator iter = tar_Add_model.listStatements();
-				while (iter.hasNext()) {
-					Statement stmt = iter.nextStatement();  // get next statement		 
-					SyncTarAdd_model.add(stmt);
-					sync_sa_model.add(stmt);
-				}
-				tar_Add_model.close();	
-				
-				SyncTarAdd_model.write(new FileOutputStream(configure.SyncTarAdd), configure.fileSyntax);
-				SyncTarAdd_model.close();
-				
-				sync_sa_model.write(new FileOutputStream(configure.SyncSrcAdd), configure.fileSyntax);		
-				sync_sa_model.close();
 		}
 	}
 }

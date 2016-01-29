@@ -30,9 +30,7 @@ public class manual_Selector {
 
 	public static void select (List<String> predicates_toResolve, List<String> predicates_notToResolve) {
 		Map<String, String> resolutionFunctionforPredicate  = new HashMap<String, String>();	
-		
-		//int pos	= co_evolution_Manager.configure.newTarget.indexOf(".");.substring(0, pos)
-		filename = "manual_FunctionSelector.xml";
+			filename = "manual_FunctionSelector.xml";
 		File file = new File(filename);
 
 		if(!file.exists()) 	{

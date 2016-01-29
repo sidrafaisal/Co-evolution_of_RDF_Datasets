@@ -2,21 +2,20 @@ package Conflict_Finder;
 
 import Conflict_Resolver.resolver;
 import Conflict_Resolver.statistics;
+import strategy.strategy;
 import co_evolution_Manager.configure;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import javax.annotation.Nonnull;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.graph.Triple;
 import org.apache.jena.rdf.model.Model;
@@ -28,8 +27,6 @@ import org.apache.jena.rdf.model.Statement;
 import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.riot.RiotException;
 import org.apache.jena.shared.AddDeniedException;
-import org.apache.jena.util.FileManager;
-import org.apache.jena.util.iterator.ExtendedIterator;
 
 import org.semanticweb.HermiT.Reasoner;
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -44,88 +41,79 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 
 public class source_Delta {
-
+	public static long funobj_Triples=0;
 	public static String current_Predicate = "";
 	public static String current_Predicate_Type = "";	
-	public static long number_Of_ConflictingTriples = 0;
-	public static long number_Of_ResolvedTriples = 0;
+	public static long number_Of_ConflictingTriples=0;
+	public static long number_Of_conflictingTriples_S3=0, duplicate_Triples=0;
 
-	public static Map<String, Integer> usedFunctions = new HashMap<String, Integer>();
-	public static Map <String, Integer> predicateFunctionUseCounter = new HashMap <String, Integer> ();
-	public static long [] number_Of_caseTriples = new long [8];
-	static Model SrcAdd_model, SyncTarAdd_model, SyncSrcAdd_model, SyncSrcDel_model, TarAdd_model, SyncTarDel_model;
+	static String functionforPredicate = "";
 
-	public static void apply () throws RiotException, FileNotFoundException, AddDeniedException, OWLOntologyCreationException {
+	public static void apply (Property property) throws RiotException, FileNotFoundException, AddDeniedException, OWLOntologyCreationException {
 
-		SyncTarAdd_model = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);		
-		SyncTarDel_model = FileManager.get().loadModel(configure.SyncTarDel, configure.fileSyntax);		
-		SyncSrcAdd_model = FileManager.get().loadModel(configure.SyncSrcAdd, configure.fileSyntax);
-		SyncSrcDel_model = FileManager.get().loadModel(configure.SyncSrcDel, configure.fileSyntax);
-		if (configure.targetAdditionsChangeset!=null)
-			TarAdd_model = FileManager.get().loadModel(configure.targetAdditionsChangeset, configure.fileSyntax);
+		if (configure.sourceAdditionsChangeset != null) 
+			additions_changeset(property);
+		if (configure.sourceDeletionsChangeset != null)
+			deletions_changeset(property);	
 
-			additions_changeset();
-			deletions_changeset();	
-			
-			SyncTarAdd_model.write(new FileOutputStream(configure.SyncTarAdd), configure.fileSyntax);
-			SyncTarAdd_model.close();	
-
-			SyncTarDel_model.write(new FileOutputStream(configure.SyncTarDel), configure.fileSyntax);
-			SyncTarDel_model.close();				
-
-			SyncSrcAdd_model.write(new FileOutputStream(configure.SyncSrcAdd), configure.fileSyntax);
-			SyncSrcAdd_model.close();	
-
-			SyncSrcDel_model.write(new FileOutputStream(configure.SyncSrcDel), configure.fileSyntax);
-			SyncSrcDel_model.close();				
-			
-			if (configure.targetAdditionsChangeset!=null) {
-				TarAdd_model.write(new FileOutputStream(configure.targetAdditionsChangeset), configure.fileSyntax); //resolved values are of source
-			TarAdd_model.close();
-			}
+		if (configure.targetAdditionsChangeset!=null) 
+			strategy.TarAdd_model.write(new FileOutputStream(configure.targetAdditionsChangeset), configure.fileSyntax); //resolved values are of source
 	}
 
 	/*Find conflicts for source additions changeset: Pick each triple s1,p1,o1 from source additions changeset and
 	  check for s1,p1,o2 in target changesets and inital target*/
 
-	public static void additions_changeset () throws FileNotFoundException, org.apache.jena.riot.RiotException, AddDeniedException, OWLOntologyCreationException{		
-		if (configure.sourceAdditionsChangeset != null) {
-				
-			SrcAdd_model = FileManager.get().loadModel(configure.sourceAdditionsChangeset, configure.fileSyntax);
-			StmtIterator iter = SrcAdd_model.listStatements();
+	public static void additions_changeset (Property property) throws FileNotFoundException, org.apache.jena.riot.RiotException, AddDeniedException, OWLOntologyCreationException {		
 
-			while (iter.hasNext()) {
+		Map<Resource, List<Property>> SubPred = new HashMap<Resource, List<Property>>();
+		StmtIterator iter = strategy.SrcAdd_model.listStatements((Resource)null, property, (RDFNode)null);
+		current_Predicate = property.toString(); 
 
-				Statement stmt      = iter.nextStatement();  // get next statement
-				Resource  subject   = stmt.getSubject();     // get the subject
-				Property  predicate = stmt.getPredicate();   // get the predicate
+		if(statistics.predicateType.get(current_Predicate)!=null)
+			current_Predicate_Type = statistics.predicateType.get(current_Predicate);
 
-				current_Predicate = predicate.toString();
-				if(statistics.predicateType.get(current_Predicate)!=null)
-					current_Predicate_Type = statistics.predicateType.get(current_Predicate);
-				
+		while (iter.hasNext()) {
+
+			Statement stmt      = iter.nextStatement();  
+			Resource  subject   = stmt.getSubject();     
+
+			if (SubPred==null || SubPred.isEmpty() || (SubPred!=null && !(SubPred.get(subject).contains(property))) ) {
+
 				if (resolver.auto_selector) {
 					if (stmt.getObject().isLiteral() &&
 							!statistics.resolutionFunctionforPredicate.containsKey(current_Predicate)) {
-					if (stmt.getObject().asLiteral().getDatatypeURI().contains("String")) 
-						statistics.resolutionFunctionforPredicate.put(current_Predicate, "longest");	
-					else 
-						statistics.resolutionFunctionforPredicate.put(current_Predicate, "max");	
-				} else if (stmt.getObject().isURIResource() &&
-						!statistics.resolutionFunctionforPredicate.containsKey(current_Predicate))
-					statistics.resolutionFunctionforPredicate.put(current_Predicate, "first");	
+						if (stmt.getObject().asLiteral().getDatatypeURI().contains("String")) 
+							statistics.resolutionFunctionforPredicate.put(current_Predicate, "longest");	
+						else //todo
+							statistics.resolutionFunctionforPredicate.put(current_Predicate, "max");	
+					} else if (stmt.getObject().isURIResource() &&
+							!statistics.resolutionFunctionforPredicate.containsKey(current_Predicate))
+						statistics.resolutionFunctionforPredicate.put(current_Predicate, "first");	
 				}
-				List<Triple> conflictingTriplesDeletionSource = null, 
+				functionforPredicate = statistics.resolutionFunctionforPredicate.get(current_Predicate);
+
+				List<Statement> conflictingTriplesAdditionSource = new ArrayList<Statement>(), conflictingTriplesDeletionSource = null, 
 						conflictingTriplesTarget = null, 
 						conflictingTriplesAdditionTarget = null, 
 						conflictingTriplesDeletionTarget = null;
 
 				boolean flag_DS = false, flag_T = false, flag_AT = false, flag_DT = false;
-				
-				conflictingTriplesDeletionSource = findSimilarTriples(configure.sourceDeletionsChangeset, subject, predicate, Node.ANY, false) ;
-				conflictingTriplesTarget = findSimilarTriples(configure.initialTarget, subject, predicate, Node.ANY, false) ;
-				conflictingTriplesAdditionTarget = findSimilarTriples(configure.targetAdditionsChangeset, subject, predicate, Node.ANY, false) ;
-				conflictingTriplesDeletionTarget = findSimilarTriples(configure.targetDeletionsChangeset, subject, predicate, Node.ANY, false) ;
+				conflictingTriplesAdditionSource = findSimilarTriples(strategy.SrcAdd_model, configure.sourceAdditionsChangeset, subject, property, (RDFNode) null, false) ;
+				conflictingTriplesDeletionSource = findSimilarTriples(strategy.SrcDel_model, configure.sourceDeletionsChangeset, subject, property, (RDFNode) null, false) ;
+				conflictingTriplesTarget = findSimilarTriples(strategy.Init_model, configure.initialTarget, subject, property, (RDFNode) null, false) ;
+				conflictingTriplesAdditionTarget = findSimilarTriples(strategy.TarAdd_model, configure.targetAdditionsChangeset, subject, property, (RDFNode) null, false) ;
+				conflictingTriplesDeletionTarget = findSimilarTriples(strategy.TarDel_model, configure.targetDeletionsChangeset, subject, property, (RDFNode) null, false) ;
+
+				List <Property> newList = new ArrayList <Property>(); 
+				if (conflictingTriplesAdditionSource.size() > 1) {
+					if (SubPred.get(stmt.getSubject())!=null) 					
+						newList = SubPred.get(stmt.getSubject());						
+					newList.add(stmt.getPredicate());
+					SubPred.put(stmt.getSubject(), newList);
+				}
+				boolean isMultiple = false;
+				int repeatedItem = conflictingTriplesAdditionSource.size();
+				int currentItem = 0;
 
 				if(conflictingTriplesDeletionSource.size() > 0)
 					flag_DS = true;
@@ -135,489 +123,438 @@ public class source_Delta {
 					flag_AT = true;
 				if(conflictingTriplesDeletionTarget.size() > 0)
 					flag_DT = true;
-				
-				if ( (!flag_DT && !flag_AT) )	{	//added/modified by source
-					if (!conflictingTriplesTarget.contains(stmt) && !conflictingTriplesDeletionSource.contains(stmt.asTriple())) { //may be modified multiple times
-						SyncTarAdd_model.add(stmt);
-						number_Of_caseTriples [0] += 1;
-					}
-				} else if (!flag_DS && flag_T && flag_DT && !flag_AT) {	//added by source and deleted by target
-					if (conflictingTriplesDeletionTarget.contains(stmt.asTriple())) {
-						SyncSrcDel_model.add(stmt);						
-					} else {
-						SyncTarAdd_model.add(stmt);			
-						number_Of_caseTriples [0] += 1;
-					}
-				} else if (flag_DS && flag_T && flag_DT && !flag_AT) {	//modified by source and deleted by target
-					if (conflictingTriplesDeletionTarget.contains(stmt.asTriple())) {
-						SyncSrcDel_model.add(stmt);						
-					} else {
-						SyncTarAdd_model.add(stmt);			
-						number_Of_caseTriples [2] += 1;
-					}
-				} else if (!flag_DS && !flag_T && !flag_DT && flag_AT)  {	// added by source and target
-					resolve(stmt, conflictingTriplesAdditionTarget);	
-					number_Of_caseTriples [4] += 1;
-				} else if( (flag_DS && flag_T && flag_DT && flag_AT) || (flag_DS && !flag_T && flag_DT && flag_AT)) {	// modified by source and modified by target	
-					resolve(stmt, conflictingTriplesAdditionTarget);
-					number_Of_caseTriples [5] += 1;
-				} else if (!flag_DS && flag_T && flag_DT && flag_AT) { 	//added by source and modified by target				
-					if (conflictingTriplesDeletionTarget.contains(stmt.asTriple())) {//check same triple?
-						/*for (int i=0;i<conflictingTriplesAdditionTarget.size();i++){
-							SyncTarAdd_model.getGraph().add(conflictingTriplesAdditionTarget.get(i));
-							SyncSrcAdd_model.getGraph().add(conflictingTriplesAdditionTarget.get(i));
-						} */	// will be add in step5
-						SyncSrcDel_model.add(stmt);
-						number_Of_caseTriples [6] += 1;
-					} else {		
-						resolve(stmt, conflictingTriplesAdditionTarget);
-						number_Of_caseTriples [6] += 1;
-					}
-				} else if (flag_DS && !flag_DT && flag_AT && !flag_T)  {	// modified by source and added by target
-					resolve(stmt, conflictingTriplesAdditionTarget);	
-					number_Of_caseTriples [7] += 1;
-				} 			
-			}	
-			SrcAdd_model.close();		
-		} 	
-	}
-	
-	public static void resolve (Statement stmt, List<Triple> conflictingTriplesAdditionTarget) { 
 
-		String functionforPredicate = statistics.resolutionFunctionforPredicate.get(current_Predicate);
-		int conflictingTriplesAdditionsize = conflictingTriplesAdditionTarget.size();
+				do {
+					if ( !flag_DT && !flag_AT) 	{	//added/modified by source
+						if (!flag_T) {
+							if (!conflictingTriplesDeletionSource.contains(stmt.asTriple()))  //may be modified multiple times
+								strategy.SyncTarAdd_model.add(stmt);
+						} else if (flag_T && !conflictingTriplesTarget.contains(stmt.asTriple())) { ///need to check
+							conflictingTriplesTarget = findSimilarTriples(strategy.Init_model, configure.initialTarget, subject, property, (RDFNode) null, true) ;
+							resolve(stmt, conflictingTriplesTarget, isMultiple);	
+						} else if (conflictingTriplesTarget.contains(stmt.asTriple()) ) 
+							duplicate_Triples++;
 
-		for (int i = 0; i < conflictingTriplesAdditionsize; i++) {
-			Triple t = conflictingTriplesAdditionTarget.get(i);
-			try {
-			if(stmt.asTriple().equals(t)) {		//same values	
-				if (!SyncTarAdd_model.contains(stmt))
-					SyncTarAdd_model.add(stmt);		
-				TarAdd_model.remove(stmt);		// avoid duplicate insertion
-				Model TarDel_model = FileManager.get().loadModel(configure.targetDeletionsChangeset, configure.fileSyntax); 		// optional
-				TarDel_model.remove(stmt);
-				TarDel_model.close();		
-			} else if (current_Predicate.equals("http://www.w3.org/2000/01/rdf-schema#label")) {
-				resolveLabels(stmt, conflictingTriplesAdditionTarget, functionforPredicate);
-				break;								
-			} else if (current_Predicate.equals("http://www.w3.org/1999/02/22-rdf-syntax-ns#type") ) {
-					resolveType (stmt, conflictingTriplesAdditionTarget,functionforPredicate);
-				break;
-			} else if (current_Predicate.equals("http://www.w3.org/2002/07/owl#sameAs")) {
-				resolveSameAs (stmt, conflictingTriplesAdditionTarget);
-				break;
-			} else if (configure.predicateList.contains("http://www.w3.org/2002/07/owl#sameAs")	
-					&& stmt.getObject().isURIResource()) { // if we have sameAs triples, check if both objects are in sameas binding
-					resolveURI(stmt, conflictingTriplesAdditionTarget);
-				break;
-			} // prev case of sameAs works only for object URIs, whereas we can also have literals
-			else if (Conflict_Finder.conflicts_Finder.resolve) {
-				resolveGenerally (stmt, conflictingTriplesAdditionTarget, functionforPredicate);	
-				break;
-			}
-			} catch (RiotException | FileNotFoundException | AddDeniedException | OWLOntologyCreationException e) {
-				e.printStackTrace();
-			}
-		}
-	}
-
-	public static void resolveType (Statement stmt, List<Triple> conflictingTriplesAdditionTarget, String functionforPredicate) throws AddDeniedException, OWLOntologyCreationException { 
-		int conflictingTriplesAdditionsize = conflictingTriplesAdditionTarget.size();
-
-		for (int i = 0; i < conflictingTriplesAdditionsize; i++) {
-			Triple t = conflictingTriplesAdditionTarget.get(i);
-			if (!isDisjoint(t.getObject().getURI(), stmt.asTriple().getObject().getURI())) {
-				if (!SyncTarAdd_model.contains(stmt))
-					SyncTarAdd_model.add(stmt);
-
-				SyncTarAdd_model.getGraph().add(t);
-				Statement src_s = ResourceFactory.createStatement( 
-						ResourceFactory.createResource(t.getSubject().toString()),
-						ResourceFactory.createProperty(t.getPredicate().toString()),
-						ResourceFactory.createTypedLiteral(t.getObject())
-						);
-				if (!SyncSrcAdd_model.contains(src_s))
-					SyncSrcAdd_model.getGraph().add(t);
-
-			} else {
-				String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getURIstoResolve (stmt.getObject(), t), "String"); 
-				if (t.getObject().toString().equals(rv)) {
-					SyncTarAdd_model.getGraph().add(t);
-					Statement src_s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createTypedLiteral(t.getObject())
-							);
-					if (!SyncSrcAdd_model.contains(src_s))
-						SyncSrcAdd_model.getGraph().add(t);
-					if (!SyncSrcDel_model.contains(stmt))
-						SyncSrcDel_model.add(stmt);
-				} else if (stmt.getObject().toString().equals(rv)) {
-					if (!SyncTarAdd_model.contains(stmt))
-						SyncTarAdd_model.add(stmt);
-					Statement s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createPlainLiteral(t.getObject().toString())
-							);
-					TarAdd_model.remove(s);		
-
-					if (SyncSrcDel_model.contains(stmt))		
-						SyncSrcDel_model.remove(stmt);
+					} else if (!flag_DS && flag_T && flag_DT && !flag_AT) {	//added by source and deleted by target
+						if (conflictingTriplesDeletionTarget.contains(stmt.asTriple())) 
+							strategy.SyncSrcDel_model.add(stmt);						
+						else 
+							strategy.SyncTarAdd_model.add(stmt);
+						
+					} else if (flag_DS && flag_T && flag_DT && !flag_AT) {	//modified by source and deleted by target
+						if (conflictingTriplesDeletionTarget.contains(stmt.asTriple())) 
+							strategy.SyncSrcDel_model.add(stmt);						
+						else 
+							strategy.SyncTarAdd_model.add(stmt);		
+						
+					} else if (!flag_DS && !flag_DT && flag_AT) 	// added by source and target && !flag_T
+						resolve(stmt, conflictingTriplesAdditionTarget, isMultiple);	
 					
+					else if( (flag_DS && flag_T && flag_DT && flag_AT) || (flag_DS && !flag_T && flag_DT && flag_AT)) 	// modified by source and modified by target	
+						resolve(stmt, conflictingTriplesAdditionTarget,isMultiple);
+					
+					else if (!flag_DS && flag_T && flag_DT && flag_AT) { 	//added by source and modified by target				
+						if (conflictingTriplesDeletionTarget.contains(stmt.asTriple())) 
+							strategy.SyncSrcDel_model.add(stmt); // target triple will be add in last step
+						else 		
+							resolve(stmt, conflictingTriplesAdditionTarget, isMultiple);	
+					
+					} else if (flag_DS && !flag_DT && flag_AT && !flag_T)  	// modified by source and added by target
+						resolve(stmt, conflictingTriplesAdditionTarget, isMultiple);			
+
+					if (!conflictingTriplesAdditionSource.isEmpty() && currentItem < repeatedItem) 
+						stmt = conflictingTriplesAdditionSource.get(currentItem); 			
+
+					currentItem++;
+					isMultiple = true;
+				} while (currentItem <= repeatedItem);	
+			}	
+		}
+	}		
+
+	public static void resolve (Statement stmt, List<Statement> conflictingTriples, boolean flag) throws FileNotFoundException, AddDeniedException, RiotException, OWLOntologyCreationException { 
+
+		if (current_Predicate_Type.equals("OF")){
+			funobj_Triples++;
+			for (int i = 0; i < conflictingTriples.size(); i++) {
+
+				Statement t = conflictingTriples.get(i);
+				if(stmt.equals(t)) {
+					duplicate_Triples++;
+					if (!strategy.SyncTarAdd_model.contains(stmt))
+						strategy.SyncTarAdd_model.add(stmt);		
+
+					if (configure.targetAdditionsChangeset!=null)
+						strategy.TarAdd_model.remove(stmt);		// avoid duplicate insertion
 				} else {
-					Triple triple = Triple.create(stmt.getSubject().asNode(), stmt.getPredicate().asNode(), SyncTarAdd_model.createLiteral(rv).asNode());	
-					SyncTarAdd_model.getGraph().add(triple);
-					SyncSrcAdd_model.getGraph().add(triple);
-					SyncSrcDel_model.add(stmt);
-					Statement s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createPlainLiteral(t.getObject().toString())
-							);
-					TarAdd_model.remove(s);					
-				}
+					if (!strategy.SyncTarAdd_model.contains(stmt))
+						strategy.SyncTarAdd_model.add(stmt);	
 
-				int counter = predicateFunctionUseCounter.get(current_Predicate) + 1;
-				predicateFunctionUseCounter.put(current_Predicate, counter);
-				number_Of_ConflictingTriples ++;
+					if (!strategy.SyncTarAdd_model.contains(t)) 
+						strategy.SyncTarAdd_model.add(t);
+					if (!strategy.SyncSrcAdd_model.contains(t))
+						strategy.SyncSrcAdd_model.add(t);
+					funobj_Triples++;
+				}
+			}
+		} else {
+			if (current_Predicate.equals("http://www.w3.org/2000/01/rdf-schema#label")) 
+				resolveLabels(stmt, conflictingTriples, functionforPredicate, flag);
+			else if (current_Predicate.equals("http://www.w3.org/1999/02/22-rdf-syntax-ns#type") ) 
+				resolveType (stmt, conflictingTriples,functionforPredicate, flag);
+			else if (current_Predicate.equals("http://www.w3.org/2002/07/owl#sameAs")) 
+				resolveSameAs (stmt, conflictingTriples, flag);
+			else if (configure.predicateList.contains("http://www.w3.org/2002/07/owl#sameAs")	
+					&& stmt.getObject().isURIResource())  // if we have sameAs triples, check if both objects are in sameas binding
+				resolveURI(stmt, conflictingTriples, flag);
+			else 			// prev case of sameAs works only for object URIs, whereas we can also have literals
+				resolveGenerally (stmt, conflictingTriples, flag);	
+
+		}
+	}
+
+	public static void resolveType (Statement stmt, List<Statement> conflictingTriples, String functionforPredicate, boolean flag) throws AddDeniedException, OWLOntologyCreationException { 
+		int conflictingTriplesSize = conflictingTriples.size();
+		boolean is_conflict = false;
+		for (int i = 0; i < conflictingTriplesSize; i++) {
+			Statement t = conflictingTriples.get(i);
+			if(stmt.asTriple().equals(t)) {		//same values
+				duplicate_Triples++;
+				if (!strategy.SyncTarAdd_model.contains(stmt))
+					strategy.SyncTarAdd_model.add(stmt);		
+				if (configure.targetAdditionsChangeset!=null)
+					strategy.TarAdd_model.remove(stmt);		// avoid duplicate insertion
+			} else if (!isDisjoint(t.getObject().asResource().getURI(), stmt.getObject().asResource().getURI())) {
+				if (!strategy.SyncTarAdd_model.contains(stmt))
+					strategy.SyncTarAdd_model.add(stmt);
+
+				strategy.SyncTarAdd_model.add(t);
+
+				if (!strategy.SyncSrcAdd_model.contains(t))
+					strategy.SyncSrcAdd_model.add(t);
+
+			} else if (Conflict_Finder.conflicts_Finder.resolve) {
+				String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getURIstoResolve (stmt.getObject(), t), "String"); 
+				if (!flag)
+					number_Of_ConflictingTriples ++;
+				is_conflict=true;
+				if (t.getObject().toString().equals(rv)) {
+					strategy.SyncTarAdd_model.add(t);
+
+					if (!strategy.SyncSrcAdd_model.contains(t))
+						strategy.SyncSrcAdd_model.add(t);
+					if (!strategy.SyncSrcDel_model.contains(stmt))
+						strategy.SyncSrcDel_model.add(stmt);
+				} else if (stmt.getObject().toString().equals(rv)) {
+					if (!strategy.SyncTarAdd_model.contains(stmt))
+						strategy.SyncTarAdd_model.add(stmt);
+
+					if (configure.targetAdditionsChangeset!=null)
+						strategy.TarAdd_model.remove(t);					
+
+					if (strategy.SyncSrcDel_model.contains(stmt))		
+						strategy.SyncSrcDel_model.remove(stmt);
+
+				} else {
+					Triple triple = Triple.create(stmt.getSubject().asNode(), stmt.getPredicate().asNode(), strategy.SyncTarAdd_model.createLiteral(rv).asNode());	
+					strategy.SyncTarAdd_model.getGraph().add(triple);
+					strategy.SyncSrcAdd_model.getGraph().add(triple);
+					strategy.SyncSrcDel_model.add(stmt);
+
+					if (configure.targetAdditionsChangeset!=null)
+						strategy.TarAdd_model.remove(t);			
+				}
+			} else if (!Conflict_Finder.conflicts_Finder.resolve) {
+				if (!flag)
+					number_Of_conflictingTriples_S3++;
+				is_conflict =true;
 			}
 		}
-	}
-
-	public static void resolveSameAs (Statement stmt, List<Triple> conflictingTriplesAdditionTarget) {
-		int conflictingTriplesAdditionsize = conflictingTriplesAdditionTarget.size();
-		for (int i = 0; i < conflictingTriplesAdditionsize; i++) {
-			Triple t = conflictingTriplesAdditionTarget.get(i);
-			if (!SyncTarAdd_model.contains(stmt))
-				SyncTarAdd_model.add(stmt);
-			SyncTarAdd_model.getGraph().add(t);
-			Statement src_s = ResourceFactory.createStatement( 
-					ResourceFactory.createResource(t.getSubject().toString()),
-					ResourceFactory.createProperty(t.getPredicate().toString()),
-					ResourceFactory.createTypedLiteral(t.getObject())
-					);
-			if (!SyncSrcAdd_model.contains(src_s))
-				SyncSrcAdd_model.getGraph().add(t);
+		if (is_conflict) {
+			if (Conflict_Finder.conflicts_Finder.resolve)
+				number_Of_ConflictingTriples++;
+			else
+				number_Of_conflictingTriples_S3++;
 		}
 	}
-	public static void resolveURI(Statement stmt, List<Triple> conflictingTriplesAdditionTarget) throws RiotException, FileNotFoundException{ 
 
-		String functionforPredicate = statistics.resolutionFunctionforPredicate.get(current_Predicate);
-		int conflictingTriplesAdditionsize = conflictingTriplesAdditionTarget.size();
-		for (int i = 0; i < conflictingTriplesAdditionsize; i++) {
+	public static void resolveSameAs (Statement stmt, List<Statement> conflictingTriples, boolean flag) {
+		int conflictingTriplesSize = conflictingTriples.size();
+		for (int i = 0; i < conflictingTriplesSize; i++) {
+			Statement t = conflictingTriples.get(i);
+			if (!strategy.SyncTarAdd_model.contains(stmt))
+				strategy.SyncTarAdd_model.add(stmt);
+			strategy.SyncTarAdd_model.add(t); 
+			if (!strategy.SyncSrcAdd_model.contains(t))
+				strategy.SyncSrcAdd_model.add(t);
+		}
+	}
 
-			Triple t = conflictingTriplesAdditionTarget.get(i);
-			Property p = ResourceFactory.createProperty("http://www.w3.org/2002/07/owl#sameAs");
+	public static void resolveURI(Statement stmt, List<Statement> conflictingTriples, boolean flag) throws RiotException, FileNotFoundException{ 
+		boolean is_conflict=false;
+		int conflictingTriplesSize = conflictingTriples.size();
+		for (int i = 0; i < conflictingTriplesSize; i++) {
+			Statement t = conflictingTriples.get(i);
+			if(stmt.asTriple().equals(t)) {		//same values
+				duplicate_Triples++;
+				if (!strategy.SyncTarAdd_model.contains(stmt))
+					strategy.SyncTarAdd_model.add(stmt);		
+				if (configure.targetAdditionsChangeset!=null)
+					strategy.TarAdd_model.remove(stmt);		// avoid duplicate insertion				
+			} else {
+				Property p = ResourceFactory.createProperty("http://www.w3.org/2002/07/owl#sameAs");
 
-			List<Triple> sameAsInSourceAdd = findSimilarTriples(configure.sourceAdditionsChangeset, stmt.getSubject().asResource(), p, t.getObject(), false) ;
-			List<Triple> sameAsInTargetAdd = findSimilarTriples(configure.targetAdditionsChangeset, stmt.getSubject().asResource(), p, t.getObject(), false) ;
-			List<Triple> sameAsInTargetDel = findSimilarTriples(configure.targetDeletionsChangeset, stmt.getSubject().asResource(), p, t.getObject(), false) ;	
-			List<Triple> sameAsInSourceDel = findSimilarTriples(configure.sourceDeletionsChangeset, stmt.getSubject().asResource(), p, t.getObject(), false) ;	
-			List<Triple> sameAsInTarget = findSimilarTriples(configure.initialTarget, stmt.getSubject().asResource(), p, t.getObject(), false) ;	
+				List<Statement> sameAsInSourceAdd = findSimilarTriples(strategy.SrcAdd_model, configure.sourceAdditionsChangeset, stmt.getSubject().asResource(), p, t.getObject(), false) ;
+				List<Statement> sameAsInTargetAdd = findSimilarTriples(strategy.TarAdd_model, configure.targetAdditionsChangeset, stmt.getSubject().asResource(), p, t.getObject(), false) ;
+				List<Statement> sameAsInTargetDel = findSimilarTriples(strategy.TarDel_model, configure.targetDeletionsChangeset, stmt.getSubject().asResource(), p, t.getObject(), false) ;	
+				List<Statement> sameAsInSourceDel = findSimilarTriples(strategy.SrcDel_model, configure.sourceDeletionsChangeset, stmt.getSubject().asResource(), p, t.getObject(), false) ;	
+				List<Statement> sameAsInTarget = findSimilarTriples(strategy.Init_model, configure.initialTarget, stmt.getSubject().asResource(), p, t.getObject(), false) ;	
 
-			if (!sameAsInSourceAdd.isEmpty() || !sameAsInTargetAdd.isEmpty() || !sameAsInTargetDel.isEmpty() || !sameAsInSourceDel.isEmpty() || !sameAsInTarget.isEmpty()) {									
-				if (!SyncTarAdd_model.contains(stmt))
-					SyncTarAdd_model.add(stmt);
+				if (!sameAsInSourceAdd.isEmpty() || !sameAsInTargetAdd.isEmpty() || !sameAsInTargetDel.isEmpty() || !sameAsInSourceDel.isEmpty() || !sameAsInTarget.isEmpty()) {									
+					if (!strategy.SyncTarAdd_model.contains(stmt))
+						strategy.SyncTarAdd_model.add(stmt);
 
-				SyncTarAdd_model.getGraph().add(t);									
-				Statement src_s = ResourceFactory.createStatement( 
-						ResourceFactory.createResource(t.getSubject().toString()),
-						ResourceFactory.createProperty(t.getPredicate().toString()),
-						ResourceFactory.createTypedLiteral(t.getObject())
-						);
-				if (!SyncSrcAdd_model.contains(src_s))
-					SyncSrcAdd_model.getGraph().add(t);
+					strategy.SyncTarAdd_model.add(t);
+					if (!strategy.SyncSrcAdd_model.contains(t))
+						strategy.SyncSrcAdd_model.add(t);
 
-			} else	{
-				Resource r = ResourceFactory.createResource(t.getObject().toString());
-				sameAsInSourceAdd = findSimilarTriples(configure.sourceAdditionsChangeset, r, p, stmt.getObject().asNode(), false) ;		
-				sameAsInTargetAdd = findSimilarTriples(configure.targetAdditionsChangeset, r, p, stmt.getObject().asNode(), false) ;
-				sameAsInTarget = findSimilarTriples(configure.initialTarget, r, p, stmt.getObject().asNode(), false) ;
-				sameAsInTargetDel = findSimilarTriples(configure.targetDeletionsChangeset, r, p, stmt.getObject().asNode(), false) ; 
-				sameAsInSourceDel = findSimilarTriples(configure.sourceDeletionsChangeset, r, p, stmt.getObject().asNode(), false) ;	
+				} else	{
+					Resource r = ResourceFactory.createResource(t.getObject().toString());
+					sameAsInSourceAdd = findSimilarTriples(strategy.SrcAdd_model, configure.sourceAdditionsChangeset, r, p, stmt.getObject(), false) ;		
+					sameAsInTargetAdd = findSimilarTriples(strategy.TarAdd_model, configure.targetAdditionsChangeset, r, p, stmt.getObject(), false) ;
+					sameAsInTarget = findSimilarTriples(strategy.Init_model, configure.initialTarget, r, p, stmt.getObject(), false) ;
+					sameAsInTargetDel = findSimilarTriples(strategy.TarDel_model, configure.targetDeletionsChangeset, r, p, stmt.getObject(), false) ; 
+					sameAsInSourceDel = findSimilarTriples(strategy.SrcDel_model, configure.sourceDeletionsChangeset, r, p, stmt.getObject(), false) ;	
 
-				if (!sameAsInSourceAdd.isEmpty() || !sameAsInTargetAdd.isEmpty() || !sameAsInTargetDel.isEmpty() || !sameAsInSourceDel.isEmpty() || !sameAsInTarget.isEmpty()) {
+					if (!sameAsInSourceAdd.isEmpty() || !sameAsInTargetAdd.isEmpty() || !sameAsInTargetDel.isEmpty() || !sameAsInSourceDel.isEmpty() || !sameAsInTarget.isEmpty()) {
 
-					if (!SyncTarAdd_model.contains(stmt))
-						SyncTarAdd_model.add(stmt);
+						if (!strategy.SyncTarAdd_model.contains(stmt))
+							strategy.SyncTarAdd_model.add(stmt);
 
-					SyncTarAdd_model.getGraph().add(t);	
-					Statement src_s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createTypedLiteral(t.getObject())
-							);
-					if (!SyncSrcAdd_model.contains(src_s))
-						SyncSrcAdd_model.getGraph().add(t);
+						strategy.SyncTarAdd_model.add(t);	
 
-				} else if (Conflict_Finder.conflicts_Finder.resolve) {
-					String [] args = {"",""};
-					args [0] = stmt.getObject().asResource().getURI().toString();
-					args [1] = t.getObject().getURI().toString() ;
-					String rv = Conflict_Resolver.resolver.apply(functionforPredicate, args, "String"); 
+						if (!strategy.SyncSrcAdd_model.contains(t))
+							strategy.SyncSrcAdd_model.add(t);
 
-					if (args[0].equals(rv))
-					{
-						Statement s = ResourceFactory.createStatement( 
-								ResourceFactory.createResource(t.getSubject().toString()),
-								ResourceFactory.createProperty(t.getPredicate().toString()),
-								ResourceFactory.createPlainLiteral(t.getObject().toString())
-								);
-						TarAdd_model.remove(s);
+					} else if (Conflict_Finder.conflicts_Finder.resolve) {
+						String [] args = {"",""};
+						args [0] = stmt.getObject().asResource().getURI().toString();
+						args [1] = t.getObject().asResource().getURI().toString() ;
+						String rv = Conflict_Resolver.resolver.apply(functionforPredicate, args, "String"); 
+						if (!flag)
+							number_Of_ConflictingTriples ++;
+						is_conflict=true;
+						if (args[0].equals(rv))
+						{
+							if (configure.targetAdditionsChangeset!=null)
+								strategy.TarAdd_model.remove(t);
 
-						if (!SyncTarAdd_model.contains(stmt))
-							SyncTarAdd_model.add(stmt);
+							if (!strategy.SyncTarAdd_model.contains(stmt))
+								strategy.SyncTarAdd_model.add(stmt);
 
-						if (SyncSrcDel_model.contains(stmt))
-							SyncSrcDel_model.remove(stmt);
-					} else if (args[1].equals(rv)) {
+							if (strategy.SyncSrcDel_model.contains(stmt))
+								strategy.SyncSrcDel_model.remove(stmt);
+						} else if (args[1].equals(rv)) {
+							strategy.SyncTarAdd_model.add(t);
 
-						SyncTarAdd_model.getGraph().add(t);
+							if (!strategy.SyncSrcAdd_model.contains(t))
+								strategy.SyncSrcAdd_model.add(t);
+							strategy.SyncSrcDel_model.add(stmt);
+						} else {
 
-						Statement src_s = ResourceFactory.createStatement( 
-								ResourceFactory.createResource(t.getSubject().toString()),
-								ResourceFactory.createProperty(t.getPredicate().toString()),
-								ResourceFactory.createTypedLiteral(t.getObject())
-								);
-						if (!SyncSrcAdd_model.contains(src_s))
-							SyncSrcAdd_model.getGraph().add(t);
-						SyncSrcDel_model.add(stmt);
-					} else {
+							Triple triple = Triple.create(stmt.getSubject().asNode(), stmt.getPredicate().asNode(), NodeFactory.createURI(rv));
+							strategy.SyncTarAdd_model.getGraph().add(triple);
+							strategy.SyncSrcAdd_model.getGraph().add(triple);
+							strategy.SyncSrcDel_model.add(stmt);
 
-						Triple triple = Triple.create(stmt.getSubject().asNode(), stmt.getPredicate().asNode(), NodeFactory.createURI(rv));
-						SyncTarAdd_model.getGraph().add(triple);
-						SyncSrcAdd_model.getGraph().add(triple);
-						SyncSrcDel_model.add(stmt);
-						Statement s = ResourceFactory.createStatement( 
-								ResourceFactory.createResource(t.getSubject().toString()),
-								ResourceFactory.createProperty(t.getPredicate().toString()),
-								ResourceFactory.createPlainLiteral(t.getObject().toString())
-								);
-						TarAdd_model.remove(s);
+							if (configure.targetAdditionsChangeset!=null)
+								strategy.TarAdd_model.remove(t);
+						}
+					} else if (!Conflict_Finder.conflicts_Finder.resolve) {
+						if (!flag)
+							number_Of_conflictingTriples_S3++;
+						is_conflict =true;
 					}
-					int counter = predicateFunctionUseCounter.get(current_Predicate) + 1;
-					predicateFunctionUseCounter.put(current_Predicate, counter);
-
 				}
 			}
 		}
+		if (is_conflict) {
+			if (Conflict_Finder.conflicts_Finder.resolve)
+				number_Of_ConflictingTriples++;
+			else
+				number_Of_conflictingTriples_S3++;
+		}
 	}
 
-	public static boolean resolveGenerally (Statement stmt, List<Triple> conflictingTriplesAdditionTarget, String functionforPredicate) {							
+	public static void resolveGenerally (Statement stmt, List<Statement> conflictingTriples, boolean flag) {							
 
 		RDFNode   object    = stmt.getObject(); 
+		int size = conflictingTriples.size();
 		boolean is_conflict = false;
+		System.out.println(size);
+		for (int j = 0; j < size; j++) {
+			Statement t = conflictingTriples.get(j);
+			if(stmt.asTriple().equals(t)) {		//same values
+				duplicate_Triples++;
+				if (!strategy.SyncTarAdd_model.contains(stmt))
+					strategy.SyncTarAdd_model.add(stmt);		
+				if (configure.targetAdditionsChangeset!=null) {
+					strategy.TarAdd_model.remove(stmt);		// avoid duplicate insertion
+				}
+			} else if (Conflict_Finder.conflicts_Finder.resolve)  {
+				String rv = "", type = "";
+				if (object.isURIResource()) 
+					rv = Conflict_Resolver.resolver.apply(functionforPredicate, getURIstoResolve (object, t), "String"); 
+				else if (object.isLiteral()) {
+					type = getType(object.asLiteral().getDatatypeURI());
+					rv = Conflict_Resolver.resolver.apply(functionforPredicate, getLiteralstoResolve (object, t), type); 
+				}
+				System.out.println("rv="+rv);
+				if (!flag)
+					number_Of_ConflictingTriples ++;
+				is_conflict=true;
+				if (t.getObject().toString().equals(rv)) {
+					if (!strategy.SyncSrcAdd_model.contains(t))
+						strategy.SyncSrcAdd_model.add(t);
+					strategy.SyncTarAdd_model.add(t);
 
-		for (int j = 0; j < conflictingTriplesAdditionTarget.size(); j++) {
-			//if (current_Predicate_Type.equals("F")) 
-			Triple t= conflictingTriplesAdditionTarget.get(j);
-
-			if (object.isURIResource()) {
-				String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getURIstoResolve (object, t), "String"); 
-
-				if (t.getObject().toString().equals(rv))
-				{
-					Statement src_s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createTypedLiteral(t.getObject())
-							);
-					if (!SyncSrcAdd_model.contains(src_s))
-						SyncSrcAdd_model.getGraph().add(t);
-					SyncTarAdd_model.getGraph().add(t);
-					
-					if (!SyncSrcDel_model.contains(stmt))
-						SyncSrcDel_model.add(stmt);
+					if (!strategy.SyncSrcDel_model.contains(stmt))
+						strategy.SyncSrcDel_model.add(stmt);
 				} else if (stmt.getObject().toString().equals(rv)) {
-					Statement s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createPlainLiteral(t.getObject().toString())
-							);
-					TarAdd_model.remove(s);
-					if (!SyncTarAdd_model.contains(stmt))
-						SyncTarAdd_model.add(stmt);
 
-					if (SyncSrcDel_model.contains(stmt))		//multiple add/modify in a file
-						SyncSrcDel_model.remove(stmt);
+					if (configure.targetAdditionsChangeset!=null)
+						strategy.TarAdd_model.remove(t);
+					if (!strategy.SyncTarAdd_model.contains(stmt))
+						strategy.SyncTarAdd_model.add(stmt);
+
+					if (strategy.SyncSrcDel_model.contains(stmt))		//multiple add/modify in a file
+						strategy.SyncSrcDel_model.remove(stmt);
 
 				} else {
+					Triple triple = null;
 
-					Triple triple = Triple.create(stmt.getSubject().asNode(), stmt.getPredicate().asNode(), NodeFactory.createURI(rv));	
-					SyncTarAdd_model.getGraph().add(triple);
-					SyncSrcAdd_model.getGraph().add(triple);
-					SyncSrcDel_model.add(stmt);
-					Statement s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createPlainLiteral(t.getObject().toString())
-							);
-					TarAdd_model.remove(s);
+					if (object.isLiteral()) {
+						if (stmt.getLiteral().getLanguage()!=null)
+							type = stmt.getLiteral().getLanguage();
+						triple = Triple.create(stmt.getSubject().asNode(), stmt.getPredicate().asNode(), strategy.SyncTarAdd_model.createTypedLiteral(rv, type).asNode());	
+					} else if (object.isURIResource()) 
+						triple = Triple.create(stmt.getSubject().asNode(), stmt.getPredicate().asNode(), NodeFactory.createURI(rv));	
+					strategy.SyncTarAdd_model.getGraph().add(triple);
+					strategy.SyncSrcAdd_model.getGraph().add(triple);
+					strategy.SyncSrcDel_model.add(stmt);
+					if (configure.targetAdditionsChangeset!=null)
+						strategy.TarAdd_model.remove(t);
 				}
-				is_conflict = true;
-			} else if (object.isLiteral()) {
-				String type = getType(object.asLiteral().getDatatypeURI());
-				String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getLiteralstoResolve (object, t), type); 
-				is_conflict = true;
-
-				if (t.getObject().toString().equals(rv))
-				{
-					SyncTarAdd_model.getGraph().add(t);
-					Statement src_s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createTypedLiteral(t.getObject())
-							);
-					if (!SyncSrcAdd_model.contains(src_s))
-						SyncSrcAdd_model.getGraph().add(t);
-					if (!SyncSrcDel_model.contains(stmt))
-						SyncSrcDel_model.add(stmt);
-				} else if (stmt.getObject().toString().equals(rv)) {
-					Statement s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createPlainLiteral(t.getObject().toString())
-							);
-					TarAdd_model.remove(s);
-					if (!SyncTarAdd_model.contains(stmt))
-						SyncTarAdd_model.add(stmt);
-
-					if (SyncSrcDel_model.contains(stmt))
-						SyncSrcDel_model.remove(stmt);
-
-				} else {
-					Statement s = ResourceFactory.createStatement( 
-							ResourceFactory.createResource(t.getSubject().toString()),
-							ResourceFactory.createProperty(t.getPredicate().toString()),
-							ResourceFactory.createPlainLiteral(t.getObject().toString())
-							);
-					TarAdd_model.remove(s);
-					if (stmt.getLiteral().getLanguage()!=null)
-						type = stmt.getLiteral().getLanguage();
-
-					Triple triple = Triple.create(stmt.getSubject().asNode(), stmt.getPredicate().asNode(), SyncTarAdd_model.createTypedLiteral(rv, type).asNode());	
-					SyncTarAdd_model.getGraph().add(triple);
-					SyncSrcAdd_model.getGraph().add(triple);
-					SyncSrcDel_model.add(stmt);
-				}
-				int counter = predicateFunctionUseCounter.get(current_Predicate) + 1;
-				predicateFunctionUseCounter.put(current_Predicate, counter);
-			}	
-
-			//		number_Of_ConflictingTriples++;	
+			} else if (!Conflict_Finder.conflicts_Finder.resolve) {
+				if (!flag)
+					number_Of_conflictingTriples_S3++;
+				is_conflict =true;
+			}
 		}
-		return is_conflict;
+		if (is_conflict) {
+			if (Conflict_Finder.conflicts_Finder.resolve)
+				number_Of_ConflictingTriples++;
+			else
+				number_Of_conflictingTriples_S3++;
+		}
 	}
 
-	public static boolean resolveLabels(Statement stmt, List<Triple> conflictingTriplesAdditionTarget, String functionforPredicate) {
-	//	int maxdiff = 0;
-		Triple t;
+	public static void resolveLabels(Statement stmt, List<Statement> conflictingTriples, String functionforPredicate, boolean flag) {
+		Statement t;
 		boolean is_conflict = false;
 		Resource  subject   = stmt.getSubject();     // get the subject
 		Property  predicate = stmt.getPredicate();   // get the predicate
 		RDFNode   object    = stmt.getObject(); 
 
-	//	int iteration = 0;
-		for (int j = 0; j < conflictingTriplesAdditionTarget.size(); j++) {
-			t = conflictingTriplesAdditionTarget.get(j);
-			String s_value = object.asLiteral().getLexicalForm().toString();
-			String t_value = t.getObject().getLiteralLexicalForm();
-			int threshold = Math.max(s_value.length(), t_value.length())/2;
-			int diff = StringUtils.getLevenshteinDistance(s_value, t_value); //greater the diff,lesser the similarity
-
-			/*	if (diff >= threshold && diff > maxdiff) {		
-				maxdiff = diff;
-				iteration = j;	
-			}*/
-			if (diff >= threshold ){
-				t = conflictingTriplesAdditionTarget.get(j);
-				
-				if (!SyncTarAdd_model.contains(stmt)) 
-					SyncTarAdd_model.add(stmt);	
-				SyncTarAdd_model.getGraph().add(t);					
-				Statement src_s = ResourceFactory.createStatement( 
-						ResourceFactory.createResource(t.getSubject().toString()),
-						ResourceFactory.createProperty(t.getPredicate().toString()),
-						ResourceFactory.createTypedLiteral(t.getObject())
-						);
-				if (!SyncSrcAdd_model.contains(src_s))
-					SyncSrcAdd_model.getGraph().add(t);
-			}
-			/*	}									
-		if (maxdiff > 0) {							// pick both that are least similar
-			t = conflictingTriplesAdditionTarget.get(iteration);
-			//Triple triple = Triple.create(subject.asNode(), predicate.asNode(), t.getObject());
-			SyncSrcAdd_model.getGraph().add(t);
-			//if (!contains (SyncTarAdd_model, triple)) 
-			SyncTarAdd_model.getGraph().add(t);	
-			SyncTarAdd_model.add(stmt);
-
-		} */else if (Conflict_Finder.conflicts_Finder.resolve) {
-
-			String type = getType(object.asLiteral().getDatatypeURI());
-			String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getLiteralstoResolve (object, t), type); //conflictingTriplesAdditionTarget
-
-			is_conflict = true;	
-			if (t.getObject().toString().equals(rv))
-			{
-				SyncTarAdd_model.getGraph().add(t);
-				Statement src_s = ResourceFactory.createStatement( 
-						ResourceFactory.createResource(t.getSubject().toString()),
-						ResourceFactory.createProperty(t.getPredicate().toString()),
-						ResourceFactory.createTypedLiteral(t.getObject())
-						);
-				if (!SyncSrcAdd_model.contains(src_s))
-					SyncSrcAdd_model.getGraph().add(t);
-				if (!SyncSrcDel_model.contains(stmt))
-					SyncSrcDel_model.add(stmt);
-			} else if (stmt.getObject().toString().equals(rv)) {
-				if (!SyncTarAdd_model.contains(stmt))
-					SyncTarAdd_model.add(stmt);
-				Statement s = ResourceFactory.createStatement( 
-						ResourceFactory.createResource(t.getSubject().toString()),
-						ResourceFactory.createProperty(t.getPredicate().toString()),
-						ResourceFactory.createPlainLiteral(t.getObject().toString())
-						);
-				TarAdd_model.remove(s);
+		for (int j = 0; j < conflictingTriples.size(); j++) {
+			t = conflictingTriples.get(j);
+			if(stmt.asTriple().equals(t)) {		//same values
+				duplicate_Triples++;
+				if (!strategy.SyncTarAdd_model.contains(stmt))
+					strategy.SyncTarAdd_model.add(stmt);		
+				if (configure.targetAdditionsChangeset!=null){
+					strategy.TarAdd_model.remove(stmt);		// avoid duplicate insertion
+				}
 			} else {
-				if (stmt.getLiteral().getLanguage()!=null)
-					type = stmt.getLiteral().getLanguage();
+				String s_value = object.asLiteral().getLexicalForm().toString();
+				String t_value = t.getObject().asLiteral().getLexicalForm();
+				int threshold = Math.max(s_value.length(), t_value.length())/2;
+				int diff = StringUtils.getLevenshteinDistance(s_value, t_value); //greater the diff,lesser the similarity
 
+				if (diff >= threshold ) {
+					t = conflictingTriples.get(j);
 
-				Triple triple = Triple.create(subject.asNode(), predicate.asNode(), SyncTarAdd_model.createTypedLiteral(rv, type).asNode());	
-				SyncTarAdd_model.getGraph().add(triple);
-				SyncSrcAdd_model.getGraph().add(triple);
-				SyncSrcDel_model.add(stmt);
-				Statement s = ResourceFactory.createStatement( 
-						ResourceFactory.createResource(t.getSubject().toString()),
-						ResourceFactory.createProperty(t.getPredicate().toString()),
-						ResourceFactory.createPlainLiteral(t.getObject().toString())
-						);
-				TarAdd_model.remove(s);
+					if (!strategy.SyncTarAdd_model.contains(stmt)) 
+						strategy.SyncTarAdd_model.add(stmt);	
+					strategy.SyncTarAdd_model.add(t);					
+ 
+					if (!strategy.SyncSrcAdd_model.contains(t))
+						strategy.SyncSrcAdd_model.add(t);
+				} else if (Conflict_Finder.conflicts_Finder.resolve) {
+
+					String type = getType(object.asLiteral().getDatatypeURI());
+					String rv = Conflict_Resolver.resolver.apply(functionforPredicate, getLiteralstoResolve (object, t), type);
+					if (!flag)
+						number_Of_ConflictingTriples ++;
+					is_conflict = true;	
+					if (t.getObject().toString().equals(rv))
+					{
+						strategy.SyncTarAdd_model.add(t);
+						if (!strategy.SyncSrcAdd_model.contains(t))
+							strategy.SyncSrcAdd_model.add(t);
+						if (!strategy.SyncSrcDel_model.contains(stmt))
+							strategy.SyncSrcDel_model.add(stmt);
+					} else if (stmt.getObject().toString().equals(rv)) {
+						if (!strategy.SyncTarAdd_model.contains(stmt))
+							strategy.SyncTarAdd_model.add(stmt); 
+						if (configure.targetAdditionsChangeset!=null)
+							strategy.TarAdd_model.remove(t);
+					} else {
+						if (stmt.getLiteral().getLanguage()!=null)
+							type = stmt.getLiteral().getLanguage();
+
+						Triple triple = Triple.create(subject.asNode(), predicate.asNode(), strategy.SyncTarAdd_model.createTypedLiteral(rv, type).asNode());	
+						strategy.SyncTarAdd_model.getGraph().add(triple);
+						strategy.SyncSrcAdd_model.getGraph().add(triple);
+						strategy.SyncSrcDel_model.add(stmt);
+						if (configure.targetAdditionsChangeset!=null)
+							strategy.TarAdd_model.remove(t);
+					}
+				} else if (!Conflict_Finder.conflicts_Finder.resolve) {
+					if (!flag)
+						number_Of_conflictingTriples_S3++;
+					is_conflict =true;
+				}
 			}
 		}
-			int counter = predicateFunctionUseCounter.get(current_Predicate) + 1;
-			predicateFunctionUseCounter.put(current_Predicate, counter);
-			//	number_Of_ConflictingTriples++;
-		}	
-
-		return is_conflict;
+		if (is_conflict) {
+			if (Conflict_Finder.conflicts_Finder.resolve)
+				number_Of_ConflictingTriples++;
+			else
+				number_Of_conflictingTriples_S3++;
+		}
 	}
 
-	public static String [] getLiteralstoResolve (RDFNode object, Triple t) {
+	public static String [] getLiteralstoResolve (RDFNode object, Statement t) {
 		String [] args = new String [2];
-		args [0] = object.asLiteral().getLexicalForm().toString();			
-		args [1] = t.getObject().getLiteralLexicalForm().toString();		
+		args [0] = object.asLiteral().getLexicalForm().toString();		
+		if (t.getObject().isLiteral())
+			args [1] = t.getObject().asLiteral().getLexicalForm().toString();		
+		else 
+			args [1] = t.getObject().toString();
 		return args;
 	}
-	
-	public static String [] getURIstoResolve (RDFNode object, Triple t) {
+
+	public static String [] getURIstoResolve (RDFNode object, Statement t) {
 		String [] args = new String [2];	
 		args [0] = object.asResource().getURI().toString();
-		args [1] = t.getObject().getURI().toString();
+		if (t.getObject().isURIResource())
+			args [1] = t.getObject().asResource().getURI().toString();
+		else
+			args [1] = t.getObject().toString();
 		return args;
 	}
+
 
 	public static boolean isDisjoint(String tar, String src) throws OWLOntologyCreationException {
 		boolean isDisjoint = false;
@@ -642,90 +579,36 @@ public class source_Delta {
 		return isDisjoint;
 	}
 
-	/*Find conflicts for source deletions changeset: Pick each triple s1,p1,o1 from source deletion changeset 
-and check for s1,p1,o2 in target changesets and initial target*/	
 
-	public static void deletions_changeset() throws org.apache.jena.riot.RiotException, FileNotFoundException{
-		if (configure.sourceDeletionsChangeset != null) {		
-			Model SyncTarDel_model = FileManager.get().loadModel(configure.SyncTarDel, configure.fileSyntax);		
-			Model SrcDel_model = FileManager.get().loadModel(configure.sourceDeletionsChangeset, configure.fileSyntax);
-//			Model SyncSrcAdd_model = FileManager.get().loadModel(configure.SyncSrcAdd, configure.fileSyntax);
-//			Model SyncTarAdd_model = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);
-			StmtIterator iter = SrcDel_model.listStatements();
+	public static void deletions_changeset(Property property) throws org.apache.jena.riot.RiotException, FileNotFoundException {
 
-			while (iter.hasNext()) {
-				Statement stmt      = iter.nextStatement();  // get next statement
-				SyncTarDel_model.add(stmt);
-				
-/*				Resource  subject   = stmt.getSubject();     // get the subject
-				Property  predicate = stmt.getPredicate();   // get the predicate
-				List<Triple> conflictingTriplesTarget = findSimilarTriples(configure.initialTarget, subject, predicate, Node.ANY, false) ;
-				List<Triple> conflictingTriplesAdditionTarget = findSimilarTriples(configure.targetAdditionsChangeset, subject, predicate, Node.ANY, true) ;
-				List<Triple> conflictingTriplesDeletionTarget = findSimilarTriples(configure.targetDeletionsChangeset, subject, predicate, Node.ANY, false) ;
-
-				boolean flag_T = false, flag_AT = false, flag_DT = false; 
-				if(conflictingTriplesTarget.size() > 0)
-					flag_T = true;
-				if(conflictingTriplesAdditionTarget.size() > 0)
-					flag_AT = true;
-				if(conflictingTriplesDeletionTarget.size() > 0)
-					flag_DT = true;
-				
-				if (!flag_AT && flag_T && !flag_DT)  	//deleted by source
-					; 									
-				else if (!flag_AT && flag_T && flag_DT)  //deleted by source and target			
-					;
-				else if (flag_AT && !flag_T && !flag_DT)  //deleted by source and added by target			
-				{ 
-					for (Triple t : conflictingTriplesAdditionTarget) {
-					SyncTarAdd_model.getGraph().add(t);
-					SyncSrcAdd_model.getGraph().add(t);
-				}
-				}
-				else if (flag_AT && flag_T && flag_DT) { //deleted by source and modified by target
-					for (Triple t : conflictingTriplesAdditionTarget) {
-					SyncTarAdd_model.getGraph().add(t);	
-					SyncSrcAdd_model.getGraph().add(t);
-				}
-				}
-	*/		} 			
-	//		SyncTarAdd_model.write(new FileOutputStream(configure.SyncTarAdd), configure.fileSyntax);
-	//		SyncTarAdd_model.close();
-			SrcDel_model.close();	
-			SyncTarDel_model.write(new FileOutputStream(configure.SyncTarDel), configure.fileSyntax);
-			SyncTarDel_model.close();
-//			SyncSrcAdd_model.write(new FileOutputStream(configure.SyncSrcAdd), configure.fileSyntax);
-//			SyncSrcAdd_model.close();					
-		}
+		StmtIterator iter = strategy.SrcDel_model.listStatements((Resource)null, property, (RDFNode)null);
+		strategy.SyncTarDel_model.add(iter.toList());
+		Conflict_Finder.conflicts_Finder.increaseDelTriples(iter.toList().size());
 	}	
 
 	/*			Find conflicting triples in target*/
 
-	public static List<Triple> findSimilarTriples(String filename, Resource subject, Property predicate, Node object, Boolean remove) throws org.apache.jena.riot.RiotException, FileNotFoundException {
+	public static List<Statement> findSimilarTriples(Model model, String filename, Resource subject, Property predicate, RDFNode object, Boolean remove) throws org.apache.jena.riot.RiotException, FileNotFoundException {
 
-		List<Triple> conflictingTriples = new ArrayList<Triple>();
+		List<Statement> conflictingStatements = new ArrayList<Statement>();
 
-		if (filename!=null){
-			Model model = FileManager.get().loadModel(filename, configure.fileSyntax);
+		if (model!=null){
+			StmtIterator iter = model.listStatements(subject, predicate, object); 
+			conflictingStatements = iter.toList();
 
-			ExtendedIterator<Triple> results = model.getGraph().find(subject.asNode(), predicate.asNode(), object); 
-			while (results.hasNext()) {
-				Triple t = results.next();
-				conflictingTriples.add(t); 
-			}
 			if (remove) {
-				for (Triple deleteConflict : conflictingTriples) 
-					model.getGraph().delete(deleteConflict);
-
+				model.remove(conflictingStatements);			
 				model.write(new FileOutputStream(filename), configure.fileSyntax);
 			}
-			model.close();
 		}
-		return conflictingTriples;
+		return conflictingStatements;
 	}
+	
 
 	public static String getType(String type) {
 
+		
 		int index = type.indexOf("#");
 		if (index == -1)
 			index = type.indexOf(":");
@@ -734,33 +617,4 @@ and check for s1,p1,o2 in target changesets and initial target*/
 		int size = type.length();
 		return type.substring(index, size);
 	}
-
-	public static void setPredicateFunctionUseCounter () {
-		Iterator<String> predicateList = configure.predicateList.iterator();
-		while (predicateList.hasNext()) {
-			Conflict_Finder.source_Delta.predicateFunctionUseCounter.put(predicateList.next(), 0);
-		}
-	}	
-
-	public static void getPredicateFunctionUseCounter () {
-		Map<String, Integer> usedFunction = new HashMap<String, Integer>();
-		Iterator<String> predicateList = configure.predicateList.iterator();
-		while (predicateList.hasNext()) {
-			String predicate = predicateList.next();
-			int counter = Conflict_Finder.source_Delta.predicateFunctionUseCounter.get(predicate);
-			String functionforPredicate = statistics.resolutionFunctionforPredicate.get(predicate);
-			if(usedFunction.containsKey(functionforPredicate)) {
-				counter = usedFunction.get(functionforPredicate) + counter;
-				usedFunction.remove(functionforPredicate); 
-			}
-			usedFunction.put(functionforPredicate, counter);
-		}
-		System.out.println("Function, #of triples resolved using this function");
-		Set <String> funList= usedFunction.keySet();		
-		for (String fun : funList) {
-			System.out.println(fun+ ", " + usedFunction.get(fun));
-		}
-		usedFunctions = usedFunction;
-	}	
-
 }

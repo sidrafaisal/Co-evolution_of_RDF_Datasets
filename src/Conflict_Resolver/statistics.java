@@ -17,7 +17,6 @@ public class statistics {
 	public static Map<String, String> resolutionFunctionforPredicate  = new HashMap<String, String>();	
 	public static Map<String, String> mostFrequentValue = new HashMap<String, String>();
 	public static Map<String, String> predicateType = new HashMap<String, String>();
-
 	
 	public static void globalVote ( String predicate ) {
 		try 

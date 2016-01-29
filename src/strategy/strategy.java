@@ -5,8 +5,6 @@ import java.io.FileOutputStream;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.Property;
 import org.apache.jena.rdf.model.ResourceFactory;
-import org.apache.jena.rdf.model.Statement;
-import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.util.FileManager;
 
 import co_evolution_Manager.configure;
@@ -15,77 +13,69 @@ public class strategy {
 	
 	static String strategy;	
 
+	public static Model SrcAdd_model, SrcDel_model, TarDel_model, TarAdd_model, Init_model,
+	SyncTarAdd_model, SyncSrcAdd_model, SyncSrcDel_model, SyncTarDel_model;
+
 	public static void apply () throws FileNotFoundException {		
+
+		SyncTarAdd_model = FileManager.get().loadModel(configure.SyncTarAdd, configure.fileSyntax);		
+		SyncTarDel_model = FileManager.get().loadModel(configure.SyncTarDel, configure.fileSyntax);		
+		SyncSrcAdd_model = FileManager.get().loadModel(configure.SyncSrcAdd, configure.fileSyntax);
+		SyncSrcDel_model = FileManager.get().loadModel(configure.SyncSrcDel, configure.fileSyntax);
+		Init_model = FileManager.get().loadModel(configure.initialTarget, configure.fileSyntax);
+		
+		if (configure.sourceAdditionsChangeset!=null)
+			SrcAdd_model = FileManager.get().loadModel(configure.sourceAdditionsChangeset, configure.fileSyntax);
+		if (configure.sourceDeletionsChangeset!=null)
+			SrcDel_model = FileManager.get().loadModel(configure.sourceDeletionsChangeset, configure.fileSyntax);
+		if (configure.targetAdditionsChangeset!=null)
+			TarAdd_model = FileManager.get().loadModel(configure.targetAdditionsChangeset, configure.fileSyntax);
+		if (configure.targetDeletionsChangeset!=null)
+			TarDel_model = FileManager.get().loadModel(configure.targetDeletionsChangeset, configure.fileSyntax);
+		
 		for (String p: configure.predicateList)
 		{
-			String strategy = configure.strategyforPredicate.get(p);
+			strategy = configure.strategyforPredicate.get(p);
 			Property property = ResourceFactory.createProperty(p);
 
 			if (strategy.equals("syncsourceNignorelocal")) {
 				long startTime   = System.currentTimeMillis();
 				strategy1.apply(property);
 				long endTime   = System.currentTimeMillis();
-				configure.time_S1 += (endTime - startTime);	
-				
+				configure.time_S1 += (endTime - startTime);
 			} else if (strategy.equals("nsyncsourceBkeeplocal")) {
 				long startTime   = System.currentTimeMillis();
 				strategy2.apply(property);
 				long endTime   = System.currentTimeMillis();
 				configure.time_S2 += (endTime - startTime);	
-			}
-		}
-	
-		for (String p: configure.predicateList)
-		{
-			String strategy = configure.strategyforPredicate.get(p);
-
-			if (strategy.equals("syncsourceNkeeplocalBnotconflicts") || strategy.equals("syncsourceNkeeplocalWresolvedconflicts")) {
-				strategy34.apply();
-			break;
-			}	
+			} else if (strategy.equals("syncsourceNkeeplocalBnotconflict")) {
+				strategy34.apply(property, false);
+			} else if (strategy.equals("syncsourceNkeeplocalWresolvedconflicts")) {
+				strategy34.apply(property, true);
+			}			
 		}
 		
-	//	deleteTriples (configure.initialTarget, configure.SyncTarDel);
-	//	addTriples(configure.initialTarget, configure.SyncTarAdd);
+		SyncTarAdd_model.write(new FileOutputStream(configure.SyncTarAdd), configure.fileSyntax);
+		SyncTarAdd_model.close();	
 
-	}
+		SyncTarDel_model.write(new FileOutputStream(configure.SyncTarDel), configure.fileSyntax);
+		SyncTarDel_model.close();				
 
-	// delete the triples for final output
-	public static void deleteTriples (String initialtarget, String targetDeletionsChangeset) throws FileNotFoundException, org.apache.jena.riot.RiotException {
+		SyncSrcAdd_model.write(new FileOutputStream(configure.SyncSrcAdd), configure.fileSyntax);
+		SyncSrcAdd_model.close();	
 
-		if (initialtarget!=null) {	
-				Model imodel = FileManager.get().loadModel(initialtarget, configure.fileSyntax);	
-
-				if (targetDeletionsChangeset!=null) {
-					Model tmodel = FileManager.get().loadModel(targetDeletionsChangeset, configure.fileSyntax);		
-
-					StmtIterator iter = tmodel.listStatements();
-
-					while (iter.hasNext()) {
-						Statement stmt = iter.nextStatement();  // get next statement 
-						imodel.getGraph().delete(stmt.asTriple());	// Delete the triples of target from initial		    					   
-					}
-					tmodel.close();
-				} 
-				imodel.write(new FileOutputStream(initialtarget), configure.fileSyntax);
-				imodel.close();
-		} 
-	}
-
-	// write in output file
-	public static void addTriples(String inputfilename, String outputfilename) throws FileNotFoundException, org.apache.jena.riot.RiotException {
-		if (inputfilename!=null)
-		{
-				Model model = FileManager.get().loadModel(inputfilename, configure.fileSyntax);			
-				model.write(new FileOutputStream(outputfilename, true), configure.fileSyntax);
-				model.close();
-			}
-	}
-	public static void setStrategy(String s){
-		strategy = s;
-	}
+		SyncSrcDel_model.write(new FileOutputStream(configure.SyncSrcDel), configure.fileSyntax);
+		SyncSrcDel_model.close();			
+		
+		if (configure.sourceAdditionsChangeset!=null)
+			SrcAdd_model.close();		
+		if (configure.sourceDeletionsChangeset!=null)
+			SrcDel_model.close();
+		if (configure.targetAdditionsChangeset!=null) 
+			TarAdd_model.close();
+		if (configure.targetDeletionsChangeset!=null)
+			TarDel_model.close();;
+		Init_model.close();
 	
-	public String getStrategy(){
-		return strategy;
-	}
+}
 }

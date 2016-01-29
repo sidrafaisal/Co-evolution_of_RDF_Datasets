@@ -3,8 +3,8 @@ package Conflict_Resolver;
 public class resolver {
 	
 		public static String [] availableResolutionFunctions = {"sum", "average", "median", "variance", "stdDev", "max", "min", "any", "first", 
-			"shortest", "longest", "concatenation", "bestSource", "globalVote", "latest", "threshold", "best", "topN", "chooseDepending", 
-			"chooseCorresponding", "mostComplete"};	
+			"shortest", "longest", "concatenation", "bestSource", "globalVote", "mostComplete"};	
+		//"latest", "threshold", "best", "topN", "chooseDepending", "chooseCorresponding",
 		
 		public static boolean manual_selector = false;
 		public static boolean auto_selector = false;
@@ -17,15 +17,6 @@ public class resolver {
 			
 			else
 				return F_Generic.Compute (function, args); 
-
-/*else if (type.equals("anyURI") || type.equals("anySimpleType") || type.equals("ENTITIES") || type.equals("ENTITY") || 
-					type.equals("token") || type.equals("string") || type.equals("normalizedString") || type.equals("NMTOKENS") || 
-					type.equals("NMTOKEN") || type.equals("NCName") || type.equals("Name") || type.equals("IDREFS") || 
-					type.equals("ID") || type.equals("IDREF") || type.equals("language")){
-				   val = rv;
-			} else if (type.equals("double")) {
-				   val = rv;
-			} */
 			
 		}
 }

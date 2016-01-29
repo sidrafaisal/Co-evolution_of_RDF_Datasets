@@ -43,7 +43,6 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import Conflict_Resolver.auto_Selector;
 import Conflict_Resolver.resolver;
 import Conflict_Resolver.statistics;
 
@@ -79,8 +78,9 @@ public class configure {
 	private static OWLOntologyManager manager;
 	private static String filename = "";
 	
-	public void configureFiles (String sa, String sd, String ta, String td) {
+	public void configureFiles (String sa, String sd, String ta, String td) throws IOException {
 		reset_counters();
+		createFiles ("SyncSrcAdd", "SyncSrcDel", "SyncTarAdd", "SyncTarDel");
 
 		if( !isEmpty (sa))
 			setsourceAdditionsChangeset(sa);
@@ -106,6 +106,7 @@ public class configure {
 	
 	configure (String synt, String p, String o, String it) throws IOException, OWLException{ 
 		reset_counters();
+		
 		createFiles ("SyncSrcAdd", "SyncSrcDel", "SyncTarAdd", "SyncTarDel");
 		configure.fileSyntax = synt;
 		configure.ontology = o;						
@@ -167,16 +168,14 @@ public class configure {
 			//Conflict_Resolver.function_Auto_Selector.select(predicates_toResolve, predicates_notToResolve);
 				resolver.auto_selector = true;
 			}
-
-			Conflict_Finder.source_Delta.setPredicateFunctionUseCounter ();	
 		}
 	}
-	public static void populate(){		
+	public static void populate() {		
 		try {
-			File fXmlFile = new File(filename);
+			File file = new File(filename);
 			DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
 			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-			Document doc = dBuilder.parse(fXmlFile);
+			Document doc = dBuilder.parse(file);
 			doc.getDocumentElement().normalize();
 
 			NodeList predList = doc.getElementsByTagName("Predicate");
@@ -250,20 +249,24 @@ public class configure {
 	}
 	
 	public static void reset_counters() {
-		for (int i = 0; i < 8; i++)
-			Conflict_Finder.source_Delta.number_Of_caseTriples [i] = 0;
-		configure.time_S1 = 0;
-		configure.time_S2 = 0;
-		
 		S1_Del_triplesize = 0;
-		S2_Del_triplesize = 0;
+		S2_Del_triplesize = 0;		
+		Conflict_Finder.conflicts_Finder.S3_Del_triplesize = 0;
 		
 		S1_Add_triplesize = 0;
-		S2_Add_triplesize = 0;
-		
+		S2_Add_triplesize = 0;		
 		Conflict_Finder.conflicts_Finder.S3_Add_triplesize = 0;
-		Conflict_Finder.conflicts_Finder.CDRTime = 0;
-		
+		Conflict_Finder.conflicts_Finder.S3_Del_triplesize = 0;
+		Conflict_Finder.conflicts_Finder.S4_Add_triplesize = 0;
+		Conflict_Finder.conflicts_Finder.S4_Del_triplesize = 0;
+		Conflict_Finder.source_Delta.number_Of_ConflictingTriples = 0;
+		Conflict_Finder.source_Delta.number_Of_conflictingTriples_S3=0;
+		Conflict_Finder.source_Delta.duplicate_Triples=0;
+		configure.time_S1 = 0;
+		configure.time_S2 = 0;		
+		Conflict_Finder.conflicts_Finder.time_S3 = 0;
+		Conflict_Finder.conflicts_Finder.time_S4 = 0;	
+		Conflict_Finder.source_Delta.funobj_Triples = 0;
 	}
 	private static void createFiles (String SyncSrcAdd, String SyncSrcDel, String SyncTarAdd, String SyncTarDel) throws IOException { 
 
@@ -308,7 +311,7 @@ public class configure {
 
 		if (!classexpr.isEmpty()){
 			if (objprop.isFunctional(OWLOntology) ) //|| objprop.isInverseFunctional(OWLOntology)) 	
-				statistics.predicateType.put(p, "F"); 
+				statistics.predicateType.put(p, "OF"); 
 		} else {
 
 			OWLDataProperty dataprop = fac.getOWLDataProperty(i);
@@ -316,45 +319,34 @@ public class configure {
 
 			if (!datarange.isEmpty()){
 				if (dataprop.isFunctional(OWLOntology))
-					statistics.predicateType.put(p, "F"); 
+					statistics.predicateType.put(p, "DF"); 
 			}
 		}		
 		reasoner.dispose();
 	}
 	
-	public static void setfileSyntax(String s){
-		fileSyntax = s;
-	}
 
-	public static void setinitialTarget(String s){
+	private static void setinitialTarget(String s){
 		initialTarget = s;
 	}
-	public static void setSyncSrcAdd(String s){
-		SyncSrcAdd = s;
-	}
-	public static void setSyncSrcDel(String s){
-		SyncSrcDel = s;
-	}
-	public static void setsourceAdditionsChangeset(String s){
+
+	private static void setsourceAdditionsChangeset(String s){
 		sourceAdditionsChangeset = s;
 	}
 
-	public static void setsourceDeletionsChangeset(String s){
+	private static void setsourceDeletionsChangeset(String s){
 		sourceDeletionsChangeset = s;
 	}
 
-	public static void settargetAdditionsChangeset(String s){
+	private static void settargetAdditionsChangeset(String s){
 		targetAdditionsChangeset = s;
 	}
 
-	public static void settargetDeletionsChangeset(String s){
+	private static void settargetDeletionsChangeset(String s){
 		targetDeletionsChangeset = s;
 	}
 
-	public static void setOntology(String o) {
-		ontology = o;
-	}
-	public static boolean isEmpty(String f) {
+	private static boolean isEmpty(String f) {
 		if (f!=null){
 			File file = new File(f);
 			if(file.length()<=0)
