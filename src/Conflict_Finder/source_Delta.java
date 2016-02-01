@@ -130,8 +130,9 @@ public class source_Delta {
 							if (!conflictingTriplesDeletionSource.contains(stmt.asTriple()))  //may be modified multiple times
 								strategy.SyncTarAdd_model.add(stmt);
 						} else if (flag_T && !conflictingTriplesTarget.contains(stmt.asTriple())) { ///need to check
-							conflictingTriplesTarget = findSimilarTriples(strategy.Init_model, configure.initialTarget, subject, property, (RDFNode) null, true) ;
-							resolve(stmt, conflictingTriplesTarget, isMultiple);	
+							strategy.SyncTarAdd_model.add(stmt);
+						//	conflictingTriplesTarget = findSimilarTriples(strategy.Init_model, configure.initialTarget, subject, property, (RDFNode) null, true) ;
+						//	resolve(stmt, conflictingTriplesTarget, isMultiple);	
 						} else if (conflictingTriplesTarget.contains(stmt.asTriple()) ) 
 							duplicate_Triples++;
 
@@ -167,7 +168,7 @@ public class source_Delta {
 
 					currentItem++;
 					isMultiple = true;
-				} while (currentItem <= repeatedItem);	
+				} while (currentItem < repeatedItem);	
 			}	
 		}
 	}		

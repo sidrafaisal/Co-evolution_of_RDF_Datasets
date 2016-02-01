@@ -83,8 +83,8 @@ public class main {
 				printStats();	
 				applySyncDelta();
 
-				arr.add(configure.SyncSrcAdd);
-				arr.add(configure.SyncSrcDel);
+				arr.add(configure.SyncTarAdd);
+				arr.add(configure.SyncTarDel);
 				emptyResources (arr);	
 				resetcounters();				
 //				find_unique_objects(arr);
@@ -106,8 +106,8 @@ public class main {
 				printStats();	
 				applySyncDelta();
 
-				arr.add(configure.SyncSrcAdd);
-				arr.add(configure.SyncSrcDel);
+				arr.add(configure.SyncTarAdd);
+				arr.add(configure.SyncTarDel);
 				emptyResources (arr);	
 				resetcounters();				
 //				find_unique_objects(arr);
@@ -157,8 +157,8 @@ public class main {
 							printStats();	
 							applySyncDelta();
 
-							arr.add(configure.SyncSrcAdd);
-							arr.add(configure.SyncSrcDel);
+							arr.add(configure.SyncTarAdd);
+							arr.add(configure.SyncTarDel);
 							emptyResources (arr);	
 							resetcounters();				
 //							find_unique_objects(arr);
@@ -208,8 +208,8 @@ public class main {
 				printStats();	
 				applySyncDelta();
 
-				arr.add(configure.SyncSrcAdd);
-				arr.add(configure.SyncSrcDel);
+				arr.add(configure.SyncTarAdd);
+				arr.add(configure.SyncTarDel);
 				emptyResources (arr);	
 				resetcounters();				
 //				find_unique_objects(arr);
@@ -219,7 +219,7 @@ public class main {
 	
 public static void write(String f, String content) throws IOException {
 content = "\n"+ content ;
-			File file = new File("/Users/sidra/Desktop/"+f);
+			File file = new File("/Users/sidrafaisal/Desktop/"+f);
 			if (!file.exists()) {
 				file.createNewFile();
 			}
