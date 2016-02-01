@@ -31,10 +31,10 @@ public class main {
 	unique_objects_srcchangeset = 0, 
 	unique_objects_tarchangeset = 0, time = 0;
 	
-	public static void main (String[] args) {	
-		try {
+	public static void main (String[] args) {	System.out.println("iiii"+args[0]);
+	/*	try {
 			
-			write("input sizes.txt", "tar, srcAdd, srcDel, tarAdd, tarDel");
+		write("input sizes.txt", "tar, srcAdd, srcDel, tarAdd, tarDel");
 			write("exetimes.txt", "time_S1, time_S2, time_s3, time_s4, total in sec");
 			write("datasize.txt", "S1_Add_triple, S1_Del_triple, S2_Add_triple, S2_Del_triple, S3_Add_triple, S3_Del_triple,"
 					+ "S4_Add_triple, S4_Del_triple,"+ "conflictingTriples_S3, Conflicting_triples_s4, SyncSrcAdd, SyncSrcDel, SyncTarAdd, SyncTarDel");
@@ -56,7 +56,7 @@ public class main {
 			
 		} catch (IOException | OWLException e) { 
 			e.printStackTrace();
-		}
+		}*/
 	}
 	
 
